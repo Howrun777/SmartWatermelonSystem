@@ -1,0 +1,987 @@
+# 智能西瓜无损糖度检测系统（SmartWatermelonSystem）
+
+## 完整架构设计 + 接口文档
+
+本文档严格按照毕业设计需求编写，包含**项目分层架构、文件目录架构、功能模块架构、设备-服务端接口、前端-服务端接口**，完全匹配定义的硬件、软件、数据库、业务规则，可直接用于毕业设计说明书。
+
+---
+
+## 一、项目整体分层架构
+
+系统采用**三层架构**设计，符合物联网+Web系统标准架构，职责完全解耦：
+
+
+| 层级  | 名称                                 | 核心职责                                 | 技术栈                             |
+| --- | ---------------------------------- | ------------------------------------ | ------------------------------- |
+| 感知层 | 瓜田环境采集终端 FieldAcquisitionTerminal  | 数据采集（光谱/温湿度/光照）、本地计算糖度、本地显示、HTTP上传数据 | ESP32、Arduino/ESP-IDF、I2C传感器    |
+| 服务层 | 瓜田数据处理中心 FieldDataProcessingServer | 设备认证、数据接收、校验、计算（糖度/成熟度）、MySQL存储、接口提供 | C++、HTTP协议、MySQL、Argon2、Session |
+| 应用层 | 瓜田监测可视化平台 FieldMonitoringPlatform  | 前台展示、管理员登录、数据可视化（图表/阵列）、自动轮询         | HTML/CSS/JS、ECharts、Cookie      |
+
+
+---
+
+## 二、项目文件目录架构
+
+标准化毕业设计项目结构，分三大核心模块，目录清晰、可直接落地开发：
+
+```Plain Text
+
+SmartWatermelonSystem/  # 项目根目录
+├── FieldAcquisitionTerminal/  # 设备端（ESP32）
+│   ├── src/
+│   │   ├── main.ino               # 主程序入口
+│   │   ├── sensor_driver/         # 传感器驱动
+│   │   │   ├── AS7341.cpp/h       # 多光谱传感器
+│   │   │   ├── SHT31.cpp/h        # 温湿度传感器（SHT31，高精度±0.2℃）
+│   │   │   ├── BH1750.cpp/h       # 光照传感器
+│   │   │   └── LightControl.cpp/h  # 3W LED灯带控制（采集时开启，测完关闭）
+│   │   ├── display/               # TFT显示模块（LVGL图形库）
+│   │   │   └── lvgl_ui.cpp/h      # LVGL UI（支持6项数据同屏显示）
+│   │   ├── network/               # WiFi+HTTP上传
+│   │   │   └── HttpClient.cpp/h
+│   │   └── algorithm/             # 本地糖度计算（MLR离线公式）
+│   │       └── sugar_calc.cpp/h
+│   ├── config.h                   # 设备配置（编号、Token、服务器IP）
+│   ├── platformio.ini             # PIO 工程配置与依赖库管理
+│   └── build/                     # 编译产物目录（.pio/build/）
+│
+├── FieldDataProcessingServer/  # 后端服务器（C++）
+│   ├── src/
+│   │   ├── main.cpp               # 服务启动入口
+│   │   ├── http_server/           # HTTP服务模块
+│   │   │   ├── HttpServer.cpp/h   # 封装httplib服务器,主要功能:启动,停止服务器
+│   │   │   └── Router.cpp/h       # 集中注册路由:请求->功能接口
+│   │   ├── auth/                  # 认证模块
+│   │   │   ├── DeviceAuth.cpp/h   # 设备Token认证
+│   │   │   └── AdminAuth.cpp/h    # 管理员登录/Session
+│   │   ├── data_process/          # 数据处理模块
+│   │   │   ├── SugarCalc.cpp/h    # 光谱→糖度计算（MLR多元线性回归）
+│   │   │   ├── MaturityCalc.cpp/h # 成熟度计算
+│   │   │   └── DataCheck.cpp/h    # 数据合法性校验
+│   │   ├── db/                    # 数据库模块
+│   │   │   ├── MySQLDriver.cpp/h  # MySQL连接/CRUD
+│   │   │   └── ConnectionPool.cpp/h  # 数据库连接池
+│   │   ├── session/               # Session管理
+│   │   │   └── Session.cpp/h
+│   │   └── utils/                 # 工具类
+│   │       ├── PasswordHasher.cpp/h  # 密码哈希（Argon2，libsodium
+│   │       └── Logger.cpp/h       # 日志
+│   ├── third_party/               # 第三方开源库(httplib, json, libsodium等)
+│   ├── sql/                       # 数据库建表与初始化语句
+│   │   └── init_db.sql    
+│   ├── config.ini                 # 服务器配置（IP/端口/数据库信息）
+│   ├── CMakeLists.txt             # C++编译配置
+│   └── build/                     # 编译产物目录（cmake-build-debug/ 或 cmake-build-release/）
+│
+├── FieldMonitoringPlatform/  # 前端Web
+│   ├── index.html               # 前台首页（产品介绍+登录入口）
+│   ├── admin/
+│   │   ├── login.html           # 管理员登录页
+│   │   ├── dashboard.html       # 后台监控主页
+│   │   ├── js/
+│   │   │   ├── api.js           # 前端接口请求
+│   │   │   ├── chart.js         # ECharts图表渲染
+│   │   │   └── auto_switch.js   # 瓜田自动轮询（6s切换）
+│   │   └── css/
+│   │       └── style.css        # 页面样式
+│   └── assets/                  # 静态资源（图片/图标）
+│       ├── libs/                # 第三方JS库(echarts.min.js等)，防断网
+│       ├── images/             
+│       └── icons/
+│
+├── docs/  # 毕业设计文档
+│   ├── SWS开发者文档_v1.0.md
+│   ├── SWS需求文档_v1.0.md
+│   └── 部署手册.md
+└── README.md  # 项目说明
+```
+
+---
+
+## 三、功能模块架构
+
+分三大核心模块，**子模块完全匹配你的需求**，无冗余、无缺失：
+
+### 模块1：瓜田环境采集终端（FieldAcquisitionTerminal）
+
+```Plain Text
+
+瓜田环境采集终端
+├─ 设备配置模块
+│  └─ 设置设备编号（瓜田号-瓜组-瓜号）、Device Token、服务器IP
+├─ 传感器数据采集模块
+│  ├─ 多光谱采集（AS7341 → spectrum_json，12通道）
+│  ├─ 温湿度采集（SHT31 → 温度/湿度，高精度±0.2℃）
+│  └─ 光照采集（BH1750 → 光照强度）
+├─ 本地计算模块
+│  └─ 光谱数据 → 本地糖度（MLR离线公式，适合无网络场景）
+├─ 本地显示模块（TFT+LVGL）
+│  └─ 2.8寸240*320 TFT屏，一屏显示6项数据（设备编号、光谱、温湿度光照、糖度）
+├─ 光源控制模块
+│  └─ 3W宽谱LED灯带（采集时开启，测完关闭，排除外界环境光干扰）
+├─ 网络通信模块
+│  ├─ WiFi连接
+│  └─ HTTP数据上传（设备编号+光谱+温湿度+光照）
+└─ 数据上传策略模块（混合策略）
+   ├─ 环境数据：定时刷新（每1分钟上传一次）
+   └─ 西瓜光谱：事件驱动（按"开始检测"按钮 → 开灯→采集→上传→关灯）
+```
+
+### 模块2：瓜田数据处理中心（FieldDataProcessingServer）
+
+```Plain Text
+
+瓜田数据处理中心
+├─ HTTP服务模块
+│  └─ 监听端口、解析请求、封装响应
+├─ 设备认证模块
+│  └─ 校验Header中device_id+token（device_auth表）
+├─ 数据接收模块
+│  └─ 接收5项上传数据：设备编号、光谱、温度、湿度、光照
+├─ 数据校验模块
+│  ├─ 设备有效性校验（status=1）
+│  ├─ 环境数据校验（99无效+数值范围）
+│  └─ 瓜田号合法性校验（匹配生产信息表）
+├─ 数据计算模块
+│  ├─ 光谱→糖度计算（MLR多元线性回归：Sugar = a*ch415 + b*ch445 + ... + K）
+│  └─ 糖度→成熟度计算（maturity_score = sugar_brix / mature_sugar_threshold）
+├─ 数据库存储模块
+│  ├─ 西瓜信息表写入
+│  ├─ 瓜田环境表写入（主键冲突：时间戳+1s）
+│  ├─ 设备认证表管理
+│  ├─ 瓜田生产信息表管理
+│  └─ 管理员信息表管理
+├─ 管理员认证模块
+│  ├─ 密码哈希（Argon2，libsodium，防暴力破解/侧信道攻击）
+│  └─ Session+Cookie登录管理（1h过期）
+├─ 接口服务模块
+│  └─ 为前端提供数据查询接口
+└─ 日志模块
+   └─ 错误日志、操作日志、数据日志
+```
+
+### 模块3：瓜田监测可视化平台（FieldMonitoringPlatform）
+
+```Plain Text
+
+瓜田监测可视化平台
+├─ 前台首页模块
+│  ├─ 产品介绍（背景/功能/开发者）
+│  └─ 后台登录入口
+├─ 管理员登录模块
+│  └─ 账号密码验证、Session存储
+├─ 后台监控模块
+│  ├─ 左侧：西瓜数据阵列（编号/成熟度/糖度）
+│  ├─ 左侧：单西瓜历史糖度折线图
+│  ├─ 右侧：瓜田环境折线图（温度/湿度/光照）
+│  ├─ 瓜田分页（当前瓜田/总数量）
+│  └─ 自动轮询（6s切换瓜田）
+└─ 数据交互模块
+   └─ 与后端接口通信、实时刷新数据
+```
+
+---
+
+## 四、数据库设计
+
+### 4.1 数据库信息
+
+
+| 项目   | 值                    |
+| ---- | -------------------- |
+| 数据库名 | `sws_db`             |
+| 字符集  | `utf8mb4`            |
+| 排序规则 | `utf8mb4_unicode_ci` |
+
+
+---
+
+### 4.2 表结构设计
+
+#### 表1：管理员信息表 `admin_users`
+
+> 用于 Web 后台登录校验
+
+
+| 字段名           | 类型           | 约束                                                    | 说明                 |
+| ------------- | ------------ | ----------------------------------------------------- | ------------------ |
+| id            | INT          | PRIMARY KEY, AUTO_INCREMENT                           | 主键，唯一标识            |
+| username      | VARCHAR(64)  | UNIQUE, NOT NULL                                      | 管理员账号（唯一）          |
+| password_hash | VARCHAR(255) | NOT NULL                                              | Argon2id 哈希后的密码    |
+| role          | TINYINT      | NOT NULL, DEFAULT 1                                   | 角色：0=超级管理员，1=普通管理员 |
+| created_at    | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP                             | 创建时间               |
+| updated_at    | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新时间               |
+
+
+**权限说明**：
+
+- `role=0`（超级管理员）：最高权限，可查看数据、创建/删除普通管理员
+- `role=1`（普通管理员）：仅可查看西瓜糖度和瓜田环境数据
+
+```sql
+CREATE TABLE admin_users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(64) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role TINYINT NOT NULL DEFAULT 1 COMMENT '0=超级管理员, 1=普通管理员',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 初始化超级管理员账号 (密码: admin123)
+-- 密码哈希由 Argon2id(crypto_pwhash) 生成
+INSERT INTO admin_users (username, password_hash, role) VALUES
+('admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4bAq/xxx', 0);
+```
+
+---
+
+#### 表2：设备校验表 `device_auth`
+
+> 用于设备身份认证，防止非法设备上传数据
+
+
+| 字段名        | 类型          | 约束                        | 说明              |
+| ---------- | ----------- | ------------------------- | --------------- |
+| device_id  | VARCHAR(32) | PRIMARY KEY               | 设备编号（瓜田号-瓜组-瓜号） |
+| token      | VARCHAR(64) | NOT NULL, UNIQUE          | 设备唯一认证 Token    |
+| status     | TINYINT     | NOT NULL, DEFAULT 1       | 状态：0=禁用，1=启用    |
+| created_at | TIMESTAMP   | DEFAULT CURRENT_TIMESTAMP | 创建时间            |
+
+
+```sql
+CREATE TABLE device_auth (
+    device_id VARCHAR(32) PRIMARY KEY COMMENT '设备编号：瓜田号-瓜组-瓜号',
+    token VARCHAR(64) NOT NULL UNIQUE COMMENT '设备唯一认证Token',
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '0=禁用, 1=启用',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+---
+
+#### 表3：西瓜信息表 `watermelon_data`
+
+> 存储每个西瓜的光谱、糖度、成熟度数据
+
+
+| 字段名            | 类型           | 约束       | 说明                |
+| -------------- | ------------ | -------- | ----------------- |
+| device_id      | VARCHAR(32)  | NOT NULL | 设备编号（对应西瓜）        |
+| collected_at   | INT          | NOT NULL | 数据采集时间戳（秒级，服务器生成） |
+| sugar_brix     | DECIMAL(5,2) | NOT NULL | 当前糖度值（MLR算法计算：a*ch415 + b*ch445 + ... + K） |
+| maturity_score | DECIMAL(5,3) | NOT NULL | 成熟度评分（糖度/成熟阈值，可超过1.0） |
+| spectrum_json  | JSON         | NOT NULL | AS7341 光谱数据       |
+
+
+
+| 联合主键 | (device_id, collected_at) |
+| ---- | ------------------------- |
+
+
+```sql
+CREATE TABLE watermelon_data (
+    device_id VARCHAR(32) NOT NULL COMMENT '设备编号：瓜田号-瓜组-瓜号',
+    collected_at INT NOT NULL COMMENT '数据采集时间戳（服务器生成）',
+    sugar_brix DECIMAL(5,2) NOT NULL COMMENT '当前糖度值（MLR算法：a*ch415 + b*ch445 + ... + K）',
+    maturity_score DECIMAL(5,3) NOT NULL COMMENT '成熟度评分（可超过1.0）',
+    spectrum_json JSON NOT NULL COMMENT 'AS7341光谱数据 {"ch415":xxx, ...}',
+    PRIMARY KEY (device_id, collected_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+**注意**：AS7341 是 8+4 通道传感器，spectrum_json 存储示例：
+
+```json
+{"ch415":123,"ch445":456,"ch480":789,"ch515":234,"ch555":567,"ch595":890,"ch640":321,"ch680":654,"chClear":999,"chNIR":111}
+```
+
+---
+
+#### 表4：瓜田生产信息表 `field_production`
+
+> 存储瓜田的生产信息，用于成熟度计算
+
+
+| 字段名                    | 类型           | 约束                                                    | 说明              |
+| ---------------------- | ------------ | ----------------------------------------------------- | --------------- |
+| field_id               | VARCHAR(16)  | PRIMARY KEY                                           | 瓜田号（由生产者注册）     |
+| watermelon_variety     | VARCHAR(64)  | NOT NULL                                              | 西瓜品种            |
+| mature_sugar_threshold | DECIMAL(5,2) | NOT NULL                                              | 成熟糖度阈值（用于计算成熟度） |
+| created_at             | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP                             | 创建时间            |
+| updated_at             | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新时间            |
+
+
+```sql
+CREATE TABLE field_production (
+    field_id VARCHAR(16) PRIMARY KEY COMMENT '瓜田号',
+    watermelon_variety VARCHAR(64) NOT NULL COMMENT '西瓜品种',
+    mature_sugar_threshold DECIMAL(5,2) NOT NULL COMMENT '成熟糖度阈值（用于计算成熟度）',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+**成熟度计算公式**：`maturity_score = sugar_brix / mature_sugar_threshold`
+
+---
+
+#### 表5：瓜田环境信息表 `field_environment`
+
+> 存储瓜田环境监测数据（温度、湿度、光照）
+
+
+| 字段名           | 类型           | 约束       | 说明                |
+| ------------- | ------------ | -------- | ----------------- |
+| field_id      | VARCHAR(16)  | NOT NULL | 瓜田号（从设备编号解析）      |
+| collected_at  | INT          | NOT NULL | 数据采集时间戳（服务器生成）    |
+| temperature_c | DECIMAL(5,2) | NOT NULL | 温度（℃），无传感器=99     |
+| humidity_rh   | DECIMAL(5,2) | NOT NULL | 湿度（%RH），无传感器=99   |
+| light_lux     | INT          | NOT NULL | 光照强度（Lux），无传感器=99 |
+
+
+
+| 联合主键 | (field_id, collected_at) |
+| ---- | ------------------------ |
+
+
+```sql
+CREATE TABLE field_environment (
+    field_id VARCHAR(16) NOT NULL COMMENT '瓜田号',
+    collected_at INT NOT NULL COMMENT '数据采集时间戳（服务器生成）',
+    temperature_c DECIMAL(5,2) NOT NULL COMMENT '温度（℃），无传感器=99',
+    humidity_rh DECIMAL(5,2) NOT NULL COMMENT '湿度（%RH），无传感器=99',
+    light_lux INT NOT NULL COMMENT '光照强度（Lux），无传感器=99',
+    PRIMARY KEY (field_id, collected_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+---
+
+### 4.3 数据库初始化脚本
+
+```sql
+-- ============================================
+-- SmartWatermelonSystem 数据库初始化脚本
+-- 数据库名：sws_db
+-- ============================================
+
+CREATE DATABASE IF NOT EXISTS sws_db
+    DEFAULT CHARSET=utf8mb4
+    COLLATE=utf8mb4_unicode_ci;
+
+USE sws_db;
+
+-- 1. 管理员信息表
+CREATE TABLE IF NOT EXISTS admin_users (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    username VARCHAR(64) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role TINYINT NOT NULL DEFAULT 1 COMMENT '0=超级管理员, 1=普通管理员',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2. 设备校验表
+CREATE TABLE IF NOT EXISTS device_auth (
+    device_id VARCHAR(32) PRIMARY KEY,
+    token VARCHAR(64) NOT NULL UNIQUE,
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '0=禁用, 1=启用',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 3. 西瓜信息表
+CREATE TABLE IF NOT EXISTS watermelon_data (
+    device_id VARCHAR(32) NOT NULL,
+    collected_at INT NOT NULL,
+    sugar_brix DECIMAL(5,2) NOT NULL,
+    maturity_score DECIMAL(5,3) NOT NULL,
+    spectrum_json JSON NOT NULL,
+    PRIMARY KEY (device_id, collected_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4. 瓜田生产信息表
+CREATE TABLE IF NOT EXISTS field_production (
+    field_id VARCHAR(16) PRIMARY KEY,
+    watermelon_variety VARCHAR(64) NOT NULL,
+    mature_sugar_threshold DECIMAL(5,2) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 5. 瓜田环境信息表
+CREATE TABLE IF NOT EXISTS field_environment (
+    field_id VARCHAR(16) NOT NULL,
+    collected_at INT NOT NULL,
+    temperature_c DECIMAL(5,2) NOT NULL,
+    humidity_rh DECIMAL(5,2) NOT NULL,
+    light_lux INT NOT NULL,
+    PRIMARY KEY (field_id, collected_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
+-- 初始化示例数据
+-- ============================================
+
+-- 初始化超级管理员 (用户名: admin, 密码: admin123)
+-- Argon2id hash 生成命令: echo -n "admin123" | argon2 salt -t 3 -m 65536 -p 4
+INSERT INTO admin_users (username, password_hash, role) VALUES
+('admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4bAq/xxx-placeholder', 0);
+
+-- 初始化瓜田生产信息
+INSERT INTO field_production (field_id, watermelon_variety, mature_sugar_threshold) VALUES
+('1001', '黑美人', 12.50),
+('1002', '麒麟瓜', 13.00),
+('1003', '无籽西瓜', 11.50);
+
+-- 初始化设备认证信息
+INSERT INTO device_auth (device_id, token, status) VALUES
+('1001-01-01', 'device-token-001', 1),
+('1001-01-02', 'device-token-002', 1),
+('1002-01-01', 'device-token-003', 1);
+```
+
+---
+
+### 4.4 数据库连接配置
+
+```ini
+# config.ini
+[database]
+host = localhost
+port = 3306
+username = sws_user
+password = your_password_here
+database = sws_db
+charset = utf8mb4
+max_connections = 10
+```
+
+---
+
+### 4.5 ER 关系图
+
+```Plain Text
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              实体关系总览                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+独立实体（无需关联）：
+
+┌──────────────────────────┐          ┌──────────────────────────┐
+│      admin_users         │          │      device_auth         │
+│  ──────────────────────  │          │  ──────────────────────  │
+│  PK id (INT)             │          │  PK device_id            │
+│     username             │          │     token                │
+│     password_hash        │          │     status               │
+│     role                 │          └──────────────────────────┘
+└──────────────────────────┘                    │
+                                                │ device_id
+                                                │ (解析前缀 → field_id)
+                                                ▼
+
+┌──────────────────────────┐          ┌──────────────────────────┐
+│   field_production       │          │    watermelon_data       │
+│  ──────────────────────  │◄─────────│  ──────────────────────  │
+│  PK field_id             │   1 : N  │  PK device_id            │
+│    watermelon_variety    │          │  PK collected_at         │
+│    mature_sugar_threshold│          │     sugar_brix           │
+└──────────────────────────┘          │     maturity_score       │
+         │                            │     spectrum_json        │
+         │ field_id                   └──────────────────────────┘
+         │
+         │ 1 : N
+         ▼
+┌──────────────────────────┐
+│   field_environment      │
+│  ──────────────────────  │
+│  PK field_id             │
+│  PK collected_at         │
+│     temperature_c        │
+│     humidity_rh          │
+│     light_lux            │
+└──────────────────────────┘
+
+───────────────────────────────────────────────────────────────────────────────
+关系说明：
+───────────────────────────────────────────────────────────────────────────────
+
+1. device_auth → field_production
+   ├── 关系类型：1 : N
+   ├── 关联键：device_id 的前缀（如 "1001-01-02" → "1001"）
+   └── 含义：1个瓜田可包含多个设备
+
+2. field_production → watermelon_data
+   ├── 关系类型：1 : N
+   ├── 关联键：field_id ← device_id 前缀
+   └── 含义：1个瓜田可包含多个西瓜数据记录
+
+3. field_production → field_environment
+   ├── 关系类型：1 : N
+   ├── 关联键：field_id
+   └── 含义：1个瓜田可记录多条环境数据
+
+4. admin_users、device_auth
+   └── 独立实体，不与其他表关联
+```
+
+---
+
+### 4.6 关键业务规则
+
+
+| 规则 | 说明 |
+|------|------|
+| **环境数据无效** | 温度=99 AND 湿度=99 AND 光照=99 → HTTP 400 拒绝入库 |
+| **主键冲突解决** | 同一秒同一瓜田重复上传 → 时间戳+1秒后重试 |
+| **糖度计算算法** | MLR多元线性回归：Sugar = a×ch415 + b×ch445 + ... + K（系数由前期实验数据拟合） |
+| **成熟度计算** | `maturity_score = sugar_brix / mature_sugar_threshold` |
+| **设备禁用** | `device_auth.status = 0` → HTTP 401 拒绝上传 |
+| **瓜田号校验** | 上传数据时必须校验瓜田号存在于 `field_production` 表 |
+
+
+---
+
+## 五、接口文档
+
+分为**设备端 ↔ 服务端**、**前端 ↔ 服务端** 两类接口，**完全遵循你的业务规则**，包含请求头、参数、响应、校验逻辑。
+
+### 基础约定
+
+1. **通信协议**：HTTP/1.1
+2. **数据格式**：请求/响应均为 `JSON`
+3. **服务端地址**：`http://{服务器IP}:{端口}`（默认8080）
+4. **设备编号规则**：`瓜田号-瓜组-瓜号`（例：1001-01-05）
+5. **时间戳**：服务端统一生成（秒级）
+6. **状态码**：
+  - 200：成功
+    - 401：设备/管理员认证失败
+    - 400：数据校验失败
+    - 500：服务器内部错误
+
+---
+
+### 第一部分：设备端 ↔ 服务端 接口文档
+
+#### 接口1：设备数据上传接口
+
+**核心作用**：设备端上传采集数据，服务端校验、计算、入库
+
+- **接口地址**：`/api/device/upload`
+- **请求方式**：`POST`
+- **请求头（必传）**：
+
+
+| 参数名       | 类型     | 说明              |
+| --------- | ------ | --------------- |
+| device_id | String | 设备编号（瓜田号-瓜组-瓜号） |
+| token     | String | 设备唯一认证Token     |
+
+
+- **请求体（JSON）**：
+
+```JSON
+
+{
+  "spectrum_json": {"ch415":123,"ch445":456,"ch480":789}, // 多光谱数据
+  "temperature": 25.5,    // 温度（无传感器=99）
+  "humidity": 60.2,       // 湿度（无传感器=99）
+  "light": 10000          // 光照（无传感器=99）
+}
+```
+
+- **服务端业务逻辑**：
+  1. 校验`device_id+token` → 匹配`device_auth`表且`status=1`
+  2. 解析设备编号提取**瓜田号**
+  3. 校验瓜田号是否存在于`瓜田生产信息表`
+  4. 校验环境数据：
+    - 规则1：温度/湿度/光照不能全为99
+    - 规则2：数值范围（温度-4080℃、湿度0100%、光照0~65535Lux）
+  5. 生成**服务器时间戳**（主键冲突则+1s）
+  6. 计算糖度（MLR：Sugar = a×ch415 + b×ch445 + ... + K）→ 成熟度（糖度/成熟阈值）
+  7. 入库：
+    - 西瓜信息表（设备编号+时间戳+糖度+成熟度+光谱）
+    - 瓜田环境表（瓜田号+时间戳+温湿度+光照）
+  8. 返回响应
+- **成功响应（200）**：
+
+```JSON
+
+{
+  "code": 200,
+  "msg": "数据上传成功",
+  "data": {
+    "sugar_brix": 12.5,
+    "maturity_score": 1.02,
+    "collected_at": 1712345678
+  }
+}
+```
+
+- **失败响应**：
+  - 401：`{"code":401,"msg":"设备认证失败"}`
+  - 400：`{"code":400,"msg":"环境数据无效/瓜田号不存在"}`
+
+---
+
+### 第二部分：前端 ↔ 服务端 接口文档
+
+#### 接口1：管理员登录接口
+
+- **接口地址**：`/api/admin/login`
+- **请求方式**：`POST`
+- **请求体**：
+
+```JSON
+
+{
+  "username": "admin",
+  "password": "123456"
+}
+```
+
+- **服务端逻辑**：
+  1. Argon2验证密码 → 匹配`管理员信息表`（数据库存储 Argon2id hash）
+  2. 生成唯一Session ID → 内存存储（1h过期）
+  3. 返回Cookie：`session_id=xxx`
+- **成功响应（200）**：
+
+```JSON
+
+{"code":200,"msg":"登录成功","role":0} // role=0超级管理员/1普通管理员
+```
+
+- **失败响应（401）**：`{"code":401,"msg":"账号或密码错误"}`
+
+#### 接口2：获取所有瓜田列表
+
+- **接口地址**：`/api/admin/field/list`
+- **请求方式**：`GET`
+- **请求头**：`Cookie: session_id=xxx`
+- **成功响应**：
+
+```JSON
+
+{"code":200,"data":{"total":5,"field_list":[1001,1002,1003,1004,1005]}}
+```
+
+#### 接口3：获取单瓜田西瓜实时数据
+
+- **接口地址**：`/api/admin/watermelon/list?field_id=1001`
+- **请求方式**：`GET`
+- **请求头**：`Cookie: session_id=xxx`
+- **成功响应**：返回瓜田下所有西瓜的编号、糖度、成熟度、时间戳
+
+#### 接口4：获取单西瓜历史糖度数据
+
+- **接口地址**：`/api/admin/watermelon/history?device_id=1001-01-05`
+- **请求方式**：`GET`
+- **响应**：时间+糖度折线图数据
+
+#### 接口5：获取单瓜田环境历史数据
+
+- **接口地址**：`/api/admin/field/environment?field_id=1001`
+- **请求方式**：`GET`
+- **响应**：时间+温度+湿度+光照折线图数据
+
+#### 接口6：管理员登出
+
+- **接口地址**：`/api/admin/logout`
+- **请求方式**：`POST`
+- **逻辑**：销毁Session
+
+---
+
+## 六、核心交互流程
+
+### 1. 设备端 → 服务端 数据上传流程
+
+1. ESP32采集数据 → 本地显示 → 封装HTTP请求
+2. 请求头携带`device_id+token`
+3. 服务端认证 → 数据校验 → MLR计算糖度 → 计算成熟度
+4. 写入MySQL → 返回结果
+5. 设备端接收响应，完成上传
+
+### 2. 前端 → 服务端 监控流程
+
+1. 管理员登录 → 验证密码 → 获取Session
+2. 进入后台 → 请求瓜田列表 → 渲染分页
+3. 自动轮询（6s）→ 请求当前瓜田数据
+4. 左侧渲染西瓜阵列，右侧渲染环境图表
+5. 点击西瓜 → 请求历史数据 → 渲染折线图
+
+### 3. 关键规则落地
+
+- **环境数据无效**：温湿度光照全为99 → 400拒绝入库
+- **主键冲突**：同一秒同一瓜田 → 时间戳+1s
+- **成熟度计算**：`成熟度 = 计算糖度 / 瓜田成熟糖度阈值`
+- **糖度算法**：`Sugar = a×ch415 + b×ch445 + ... + K`（MLR多元线性回归，系数由实验数据拟合）
+- **设备禁用**：`device_auth`表`status=0` → 401拒绝上传
+
+---
+
+## 七、设备端硬件详细说明
+
+### 7.1 硬件清单
+
+本系统设备端采用 **ESP32 主控 + 模块化传感器** 架构，以下是完整硬件清单：
+
+#### 主控板
+
+| 硬件 | 型号/规格 | 数量 | 说明 |
+|------|----------|------|------|
+| 主控芯片 | ESP32 DevKit V1 | 1 | 双核处理器，WiFi+蓝牙，240MHz |
+| 存储 | 4MB Flash | 1 | 程序存储 |
+| 工作电压 | 3.3V | - | 供电范围 3.0V~3.6V |
+
+#### 显示屏模块
+
+| 硬件 | 型号/规格 | 数量 | 说明 |
+|------|----------|------|------|
+| TFT显示屏 | 2.8寸 ILI9341 | 1 | 分辨率 240×320 |
+| 接口类型 | SPI | - | 需12根引脚连接 |
+| 触摸功能 | XPT2046触摸芯片 | 1 | 支持触摸操作 |
+
+#### 传感器模块
+
+| 硬件 | 型号/规格 | 数量 | 说明 |
+|------|----------|------|------|
+| 光谱传感器 | GY-AS7341-V1 | 1 | 11通道光谱采集（8个可见光+白光+近红外） |
+| 温湿度传感器 | SHT31 | 1 | 精度 ±0.2℃，I2C接口 |
+| 光照传感器 | BH1750 | 1 | 量程 0~65535 Lux，I2C接口 |
+
+#### 光源模块
+
+| 硬件 | 型号/规格 | 数量 | 说明 |
+|------|----------|------|------|
+| LED灯带 | 3W 宽谱白光 | 1 | 采集时开启，消除环境光干扰 |
+| 驱动方式 | GPIO + 三极管 | - | 不能直连ESP32 GPIO |
+
+#### 配套材料
+
+| 材料 | 规格 | 数量 | 说明 |
+|------|------|------|------|
+| 面包板 | 830孔 | 1 | 原型搭建 |
+| 杜邦线 | 公对母/母对母 | 若干 | 传感器连接 |
+| 面包板电源 | 3.3V/5V双电源 | 1 | 为传感器供电 |
+| microUSB线 | 数据线 | 1 | 程序烧录与供电 |
+
+---
+
+### 7.2 硬件接线图
+
+#### ESP32 引脚分配
+
+| 功能 | ESP32引脚 | 说明 |
+|------|----------|------|
+| TFT_MISO | GPIO19 | SPI主机输入 |
+| TFT_MOSI | GPIO23 | SPI主机输出 |
+| TFT_SCLK | GPIO18 | SPI时钟 |
+| TFT_CS | GPIO5 | TFT片选 |
+| TFT_DC | GPIO21 | 数据/命令选择 |
+| TFT_RST | GPIO22 | 复位 |
+| TFT_BL | GPIO4 | 背光控制 |
+| SDA | GPIO21 | I2C数据线 |
+| SCL | GPIO22 | I2C时钟线 |
+| LED_POWER | GPIO26 | LED灯带控制 |
+
+#### I2C 总线接线（所有传感器共用）
+
+```
+ESP32          GY-AS7341     SHT31       BH1750
+─────────      ─────────     ─────       ───────
+GPIO21 (SDA) → SDA引脚      SDA引脚    SDA引脚
+GPIO22 (SCL) → SCL引脚      SCL引脚    SCL引脚
+3.3V        → VCC引脚      VCC引脚    VCC引脚
+GND         → GND引脚      GND引脚    GND引脚
+```
+
+#### SPI 总线接线（TFT显示屏）
+
+```
+ESP32          ILI9341 TFT
+─────────      ───────────
+GPIO18      → CLK引脚
+GPIO23      → MOSI引脚
+GPIO19      → MISO引脚 (可选，用于触摸)
+GPIO5       → CS引脚
+GPIO21      → DC引脚
+GPIO22      → RST引脚
+GPIO4       → LED引脚 (背光)
+3.3V        → VCC引脚
+GND         → GND引脚
+```
+
+---
+
+### 7.3 传感器详细参数
+
+#### AS7341 多光谱传感器
+
+| 参数 | 值 |
+|------|---|
+| 通信接口 | I2C（地址0x39） |
+| 光谱通道 | 11个（ch415, ch445, ch480, ch515, ch555, ch595, ch640, ch680, Clear, NIR） |
+| ADC分辨率 | 16位 |
+| 动态范围 | 可配置增益（GAIN） |
+| 工作电压 | 3.3V |
+| 数据格式 | 整数（0~65535） |
+
+**光谱通道波长对照**：
+
+| 通道 | 中心波长 | 半宽 |
+|------|---------|------|
+| ch415 | 415nm | 紫色 |
+| ch445 | 445nm | 蓝色 |
+| ch480 | 480nm | 青蓝色 |
+| ch515 | 515nm | 绿色 |
+| ch555 | 555nm | 黄绿色 |
+| ch595 | 595nm | 黄色 |
+| ch640 | 640nm | 橙色 |
+| ch680 | 680nm | 红色 |
+| chClear | - | 白光 |
+| chNIR | - | 近红外 |
+
+#### SHT31 温湿度传感器
+
+| 参数 | 值 |
+|------|---|
+| 通信接口 | I2C（地址0x44或0x45） |
+| 温度范围 | -40℃ ~ +125℃ |
+| 温度精度 | ±0.2℃（典型） |
+| 湿度范围 | 0% ~ 100% RH |
+| 湿度精度 | ±2% RH（典型） |
+| 工作电压 | 2.4V ~ 5.5V |
+| 数据格式 | 浮点数 |
+
+#### BH1750 光照传感器
+
+| 参数 | 值 |
+|------|---|
+| 通信接口 | I2C（地址0x23或0x5C） |
+| 光照范围 | 0 ~ 65535 Lux |
+| 测量精度 | 1 Lux |
+| 工作电压 | 3.3V ~ 5V |
+| 数据格式 | 整数 |
+
+---
+
+### 7.4 硬件实物连接注意事项
+
+1. **供电安全**
+   - ESP32 工作电压为 3.3V，不要直接连接 5V
+   - 所有传感器模块均有 3.3V 稳压芯片，可安全使用 5V 供电
+   - 面包板电源模块建议设置为 3.3V 模式
+
+2. **I2C 总线**
+   - 所有 I2C 设备共用地线和电源，SDA/SCL 并联
+   - 如需加装上拉电阻（4.7kΩ），可增强信号稳定性
+   - I2C 地址冲突检查：
+     - AS7341：0x39（默认）
+     - SHT31：0x44（默认，引脚可切换0x45）
+     - BH1750：0x23（默认，引脚可切换0x5C）
+
+3. **LED 驱动**
+   - 3W LED 不能直接连接 GPIO，会烧毁芯片
+   - 使用 NPN 三极管（如 S8050）作为开关
+   - 基极通过 330Ω 电阻连接 ESP32 GPIO
+
+4. **显示屏安装**
+   - SPI 连接需注意杜邦线尽量短，减少干扰
+   - 背光引脚可连接 PWM，实现亮度调节
+
+---
+
+## 八、系统访问凭证
+
+### 8.1 凭证汇总
+
+> **⚠️ 安全提示**：以下为系统开发/部署所需的所有密码凭证，请妥善保管，切勿泄露。
+
+| 系统/服务 | 用户名 | 密码 | 用途 |
+|-----------|--------|------|------|
+| 云服务器 | root | **Mhr289839.** | SSH远程登录、系统管理 |
+| MySQL数据库 | sws_user | **Mhr289839.** | 后端服务连接数据库 |
+| MySQL数据库 | root | **Mhr289839.** | 数据库管理员操作 |
+| Web管理后台 | admin | admin123 | 管理员登录（默认密码） |
+
+### 8.2 凭证详细说明
+
+#### 云服务器登录
+
+```
+登录方式：SSH
+IP地址：部署时获取
+端口：22（默认）
+用户名：root
+密码：Mhr289839.
+
+# 连接示例
+ssh root@your-server-ip
+```
+
+#### MySQL 数据库连接
+
+```
+主机：localhost（服务器本地）
+公网ip: 47.107.41.102
+端口：8002（默认）
+数据库名：sws_db
+用户名：sws_user
+密码：Mhr289839.
+
+# 连接示例（命令行）
+mysql -u sws_user -p sws_db
+# 输入密码：Mhr289839.
+
+# 连接示例（后端配置 config.ini）
+host = localhost
+port = 3306
+username = sws_user
+password = Mhr289839.
+database = sws_db
+```
+
+#### 管理员后台登录
+
+```
+访问地址：http://your-server-ip/admin/login.html
+用户名：admin
+密码：admin123（默认密码，首次登录后建议修改）
+```
+
+---
+
+### 8.3 密码修改建议
+
+#### MySQL 数据库密码修改
+
+```sql
+-- 以 root 身份登录 MySQL
+mysql -u root -p
+
+-- 修改 sws_user 密码
+ALTER USER 'sws_user'@'localhost' IDENTIFIED BY 'NewPassword123!';
+ALTER USER 'sws_user'@'%' IDENTIFIED BY 'NewPassword123!';
+FLUSH PRIVILEGES;
+
+-- 同时更新后端 config.ini 文件中的密码
+```
+
+#### 管理员后台密码修改
+
+建议在后端添加管理员密码修改接口，或直接在数据库中更新 Argon2id 哈希值。
+
+```bash
+# 生成新的 Argon2id 哈希
+echo -n "admin123" | argon2 salt -t 3 -m 65536 -p 4
+
+# 将生成的哈希更新到数据库
+UPDATE admin_users SET password_hash = 'argon2id$新哈希值' WHERE username = 'admin';
+```
+
+---
+
+*文档版本：v1.0*  
+*最后更新：2026年4月9日*

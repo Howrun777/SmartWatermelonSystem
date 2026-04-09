@@ -1,0 +1,3 @@
+/home/Howrun1/SmartWatermelonSystem/FieldDataProcessingServer/build/CMakeFiles/FieldDataProcessingServer.dir
+/home/Howrun1/SmartWatermelonSystem/FieldDataProcessingServer/build/CMakeFiles/edit_cache.dir
+/home/Howrun1/SmartWatermelonSystem/FieldDataProcessingServer/build/CMakeFiles/rebuild_cache.dir
