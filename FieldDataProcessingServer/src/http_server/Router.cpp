@@ -7,6 +7,8 @@
 #include <json.hpp>
 #include <iostream>
 #include <chrono>
+#include "../auth/AdminAuth.h"
+#include "../session/Session.h"
 
 using json = nlohmann::json;
 
@@ -140,7 +142,7 @@ void Router::registerRoutes(httplib::Server& svr) {
         response["data"]["list"] = field_list;
         res.set_content(response.dump(), "application/json");
     });
-    
+
     svr.Options(R"(.*)", [](const httplib::Request& req, httplib::Response& res) {
         // ... (跨域代码保持不变) ...
     });
