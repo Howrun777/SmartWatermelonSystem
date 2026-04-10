@@ -220,13 +220,13 @@ void Router::registerRoutes(httplib::Server& svr) {
         res.set_content(response.dump(), "application/json");
     });
 
-    // 4. 获取单果历史糖度数据 (最近 7 天)
+    // 4. 获取单果历史糖度数据 (最近 84 天)
     svr.Get("/api/admin/watermelon/history", [](const httplib::Request& req, httplib::Response& res) {
         json response;
         std::string device_id = req.has_param("device_id") ? req.get_param_value("device_id") : "";
         
         auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        long long seven_days_ago = now - 7 * 24 * 3600; // 7天前的时间戳
+        long long seven_days_ago = now - 84 * 24 * 3600; // 84天前的时间戳
         
         std::string sql = "SELECT collected_at, sugar_brix FROM watermelon_data "
                           "WHERE device_id = '" + device_id + "' AND collected_at > " + std::to_string(seven_days_ago) + " "
@@ -245,13 +245,13 @@ void Router::registerRoutes(httplib::Server& svr) {
         res.set_content(response.dump(), "application/json");
     });
 
-    // 5. 获取单瓜田环境历史数据 (最近 7 天)
+    // 5. 获取单瓜田环境历史数据 (最近 84 天)
     svr.Get("/api/admin/field/environment", [](const httplib::Request& req, httplib::Response& res) {
         json response;
         std::string field_id = req.has_param("field_id") ? req.get_param_value("field_id") : "";
         
         auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        long long seven_days_ago = now - 7 * 24 * 3600;
+        long long seven_days_ago = now - 84 * 24 * 3600;
         
         std::string sql = "SELECT collected_at, temperature_c, humidity_rh, light_lux FROM field_environment "
                           "WHERE field_id = '" + field_id + "' AND collected_at > " + std::to_string(seven_days_ago) + " "
