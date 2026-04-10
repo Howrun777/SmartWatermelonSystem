@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>瓜田监测大屏 - SmartWatermelonSystem</title>
+    <script src="../assets/libs/echarts.min.js"></script>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        .dashboard-container { display: flex; height: 100vh; background-color: #f4f3ec; /* 偏暖色背景匹配你的UI */ overflow: hidden; color: #333;}
+        .top-navbar { position: absolute; top: 0; left: 0; width: 100%; height: 60px; background-color: #2e7d32; color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; z-index: 1000; }
+        .logout-btn { background: transparent; border: 1px solid white; color: white; padding: 5px 15px; border-radius: 5px; cursor: pointer; transition: 0.3s;}
+        .logout-btn:hover { background: rgba(255,255,255,0.2); }
+        .main-content { margin-top: 60px; display: flex; width: 100%; height: calc(100vh - 60px); padding: 15px; gap: 15px; }
+        
+        /* 左右分栏布局与边框 */
+        .left-panel { flex: 4; display: flex; flex-direction: column; gap: 15px; border: 4px solid #3fd1e8; border-radius: 8px; padding: 10px; background: white;}
+        .right-panel { flex: 5; display: flex; flex-direction: column; gap: 15px; overflow-y: hidden; }
+        
+        .card { background: #faf9f4; border: 4px solid #3fd1e8; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; position: relative;}
+        
+        /* 隐藏右侧三个图表的边框，保持你的UI风格 */
+        .right-panel .card { flex: 1; border: 4px solid #3fd1e8; padding: 5px; }
+
+        .card-title { font-size: 1rem; font-weight: bold; margin-bottom: 5px; color: #000; padding-left: 5px;}
+        
+        /* 时间刻度控制组件 */
+        .scale-control { 
+            position: absolute; top: 10px; right: 15px; 
+            display: flex; align-items: center; gap: 5px; 
+            background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 2px;
+            z-index: 10;
+        }
+        .scale-control button { 
+            background: #f0f0f0; border: none; cursor: pointer; padding: 2px 8px; border-radius: 3px; font-size: 0.8rem; color: #555;
+        }
+        .scale-control button:hover { background: #ddd; color: #000; }
+        .scale-control span { font-size: 0.85rem; color: #555; width: 100px; text-align: center; }
+
+        /* 西瓜阵列与美化滚动条 */
+        .watermelon-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); 
+            gap: 10px; 
+            overflow-y: auto; 
+            flex-grow: 1; 
+            max-height: 45vh; 
+            padding-right: 5px;
+            align-content: start; /* 👈 新增这行，禁止垂直拉伸，向上对齐 */
+        }
+        .watermelon-grid::-webkit-scrollbar { width: 8px; }
+        .watermelon-grid::-webkit-scrollbar-track { background: #eee; border-radius: 4px; }
+        .watermelon-grid::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+        /* 西瓜卡片 */
+        .wm-item { border: 2px solid #ffb6b9; border-radius: 0; padding: 10px; text-align: center; cursor: pointer; background: #fae3d9; }
+        .wm-item:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-color: #e74c3c;}
+        .wm-item.active { border: 3px solid #e74c3c; background: #f8d0d2; }
+        .wm-id { font-weight: bold; font-size: 1rem; color: #333; margin-bottom: 5px;}
+        .wm-status { font-size: 0.9rem; color: #333; }
+        .wm-data { font-size: 1.1rem; color: #333; margin-top: 5px;}
+
+        .chart-container { flex-grow: 1; width: 100%; min-height: 200px; }
+        .switch-btn { background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
+        .switch-btn:hover { background: #d68910; }
+        .clock-container { text-align: right; margin-right: 20px; line-height: 1.2;}
+        .clock-date { font-size: 0.85rem; color: #ddd; }
+        .clock-time { font-size: 1.2rem; font-weight: bold; font-family: monospace;}
+    </style>
+</head>
+<body>
+    <div class="top-navbar">
+        <div style="font-size: 1.2rem; font-weight: bold;">🍉 瓜田监测可视化平台</div>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <button class="switch-btn" onclick="switchField(-1)">◀ 上一瓜田</button>
+            <div style="font-size: 1.1rem; min-width: 200px; text-align: center;" id="field-info-display">加载中...</div>
+            <button class="switch-btn" onclick="switchField(1)">下一瓜田 ▶</button>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div class="clock-container">
+                <div class="clock-date" id="sys-date">----/--/--</div>
+                <div class="clock-time" id="sys-time">--:--:--</div>
+            </div>
+            <span style="margin-right: 15px;">管理员：Admin</span>
+            <button class="logout-btn" onclick="logout()">退出系统</button>
+        </div>
+    </div>
+
+    <div class="dashboard-container">
+        <div class="main-content">
+            <!-- 左侧 -->
+            <div class="left-panel">
+                <div class="watermelon-grid" id="wm-grid-container">
+                    <div style="padding:20px; color:#999;">正在加载西瓜数据...</div>
+                </div>
+                <!-- 底部糖度图表 -->
+                <div style="border-top: 4px solid #3fd1e8; padding-top: 10px; position: relative;">
+                    <div class="card-title" id="wm-history-title">[设备编号]糖度历史变化</div>
+                    
+                    <!-- 替换这里的控制组件 -->
+                    <div class="scale-control">
+                        <button onclick="changeScale('sugar', -1)">◀</button>
+                        <span id="text-sugar">时间刻度: 5分钟</span>
+                        <button onclick="changeScale('sugar', 1)">▶</button>
+                    </div>
+
+                    <div class="chart-container" id="wmHistoryChart" style="min-height: 250px;"></div>
+                </div>
+            </div>
+
+            <!-- 右侧 -->
+            <div class="right-panel">
+                <div class="card">
+                    <div class="card-title">温度历史变化(℃)</div>
+                    <div class="scale-control">
+                        <button onclick="changeScale('temp', -1)">◀</button>
+                        <span id="text-temp">时间刻度: 5分钟</span>
+                        <button onclick="changeScale('temp', 1)">▶</button>
+                    </div>
+                    <div class="chart-container" id="tempChart"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">湿度历史变化(%)</div>
+                    <div class="scale-control">
+                        <button onclick="changeScale('hum', -1)">◀</button>
+                        <span id="text-hum">时间刻度: 5分钟</span>
+                        <button onclick="changeScale('hum', 1)">▶</button>
+                    </div>
+                    <div class="chart-container" id="humChart"></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">光照历史变化(Lux)</div>
+                    <div class="scale-control">
+                        <button onclick="changeScale('light', -1)">◀</button>
+                        <span id="text-light">时间刻度: 5分钟</span>
+                        <button onclick="changeScale('light', 1)">▶</button>
+                    </div>
+                    <div class="chart-container" id="lightChart"></div>
+                </div>
+            </div>
+
+    <script src="js/chart.js"></script>
+    <script src="js/auto_switch.js"></script>
+    <script>
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('sys-date').innerText = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+            document.getElementById('sys-time').innerText = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+        }, 1000);
+        function logout() { document.cookie = "session_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;"; window.location.href = "login.html"; }
+    </script>
+</body>
+</html>
