@@ -17,17 +17,38 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// 通用配置生成器：实现红黑刻度线 (彻底放弃默认自适应，强制固定坐标轴)
-function buildStrictOption(xData, yData, min, max, interval, colorsArray, threshold = null) {
+// 通用配置生成器：支持连续时间轴 (type: 'time')
+function buildStrictOption(data, min, max, interval, colorsArray, timeRange, threshold = null) {
     let option = {
         grid: { left: '8%', right: '4%', bottom: '15%', top: '10%' },
-        tooltip: { trigger: 'axis' },
+        tooltip: { 
+            trigger: 'axis',
+            axisPointer: { type: 'line' }
+        },
         xAxis: { 
-            type: 'category', 
-            data: xData, 
-            boundaryGap: false,
-            axisTick: { show: false }, // 隐藏多余刻度小短线
-            axisLine: { show: false }  // 隐藏底边横线
+            type: 'time', // ✅ 核心改变：连续时间轴
+            min: timeRange.min, // 动态限制视口左边界
+            max: timeRange.max, // 动态限制视口右边界
+            splitNumber: 12,    // 期望显示 12 个刻度
+            axisTick: { show: false }, 
+            axisLine: { show: false },
+            axisLabel: {
+                formatter: function (value) {
+                    // 根据视口跨度智能显示时间格式
+                    let date = new Date(value);
+                    let M = (date.getMonth() + 1).toString().padStart(2, '0');
+                    let d = date.getDate().toString().padStart(2, '0');
+                    let h = date.getHours().toString().padStart(2, '0');
+                    let m = date.getMinutes().toString().padStart(2, '0');
+                    
+                    let durationHours = (timeRange.max - timeRange.min) / (1000 * 3600);
+                    if (durationHours > 24) {
+                        return `${M}.${d}`; // 天/周级别显示 月.日
+                    } else {
+                        return `${h}:${m}`; // 分钟/小时级别显示 时:分
+                    }
+                }
+            }
         },
         yAxis: { 
             type: 'value', 
@@ -35,106 +56,71 @@ function buildStrictOption(xData, yData, min, max, interval, colorsArray, thresh
             axisLabel: {
                 formatter: '{value}',
                 color: (value) => {
-                    // 根据值在刻度数组中的索引决定文字颜色 (与线条颜色同步)
                     let idx = Math.round((value - min) / interval);
                     return colorsArray[idx] || '#333';
                 }
             },
-            splitLine: {
-                show: true,
-                lineStyle: {
-                    type: 'solid',
-                    color: colorsArray // 传入颜色数组，ECharts会从下往上一条条画
-                }
-            }
+            splitLine: { show: true, lineStyle: { type: 'solid', color: colorsArray } }
         },
-        /*
-        series: [{
-            type: 'line', 
-            data: yData, 
-            smooth: false, // 参考图线条是直线的折线
-            showSymbol: false, // 隐藏折线上的小圆点
-            lineStyle: { color: 'rgba(0,0,0,0)', width: 0 }, // 隐藏折线本身，只留填充色？不，保留线条
-            itemStyle: { color: '#888' },
-        }]
-        */
         series: [{
             type: 'line',
-            data: yData,
+            data: data, // ✅ 格式为 [[时间戳, 值], [时间戳, 值]...]
             smooth: false,
             showSymbol: false,
-            lineStyle: { color: '#2c3e50', width: 2.5 },   // ✅ 改成可见的颜色和线宽
+            connectNulls: false, // 数据断档时不强制连线
+            lineStyle: { color: '#2c3e50', width: 2.5 }, // 你的深灰色线条
             itemStyle: { color: '#888' },
         }]
-        
     };
 
-    /*如果有糖度成熟标准线 (黄色标注)
     if (threshold !== null) {
         option.series[0].markLine = {
             symbol: 'none',
             data: [{ yAxis: threshold }],
             lineStyle: { color: '#f39c12', type: 'solid', width: 2 },
-            label: { show: false } // 不显示右侧文字
+            label: { show: false }
         };
     }
-    */
 
     return option;
 }
 
-// 1. 渲染糖度图表
-function renderWmHistoryChart(xData, yData, deviceId, maturityThreshold = 12.5) {
+function renderWmHistoryChart(data, deviceId, timeRange, maturityThreshold = 12.5) {
     document.getElementById('wm-history-title').innerText = `[${deviceId}] 糖度历史变化`;
-    // 0~16, 间隔2. 颜色映射：0~10黑, 12~16红
     const colors = ['#333', '#333', '#333', '#333', '#333', '#333', '#e74c3c', '#e74c3c', '#e74c3c'];
-    wmHistoryChart.setOption(buildStrictOption(xData, yData, 0, 16, 2, colors, maturityThreshold), true);
+    wmHistoryChart.setOption(buildStrictOption(data, 0, 16, 2, colors, timeRange, maturityThreshold), true);
 }
 
-// 2. 渲染三个环境图表（修复入参顺序，支持独立x轴）
-function renderEnvHistoryCharts(tempXData, humXData, lightXData, tempData, humData, lightData) {
-    // 温度: -10~60, 间隔10. 红(-10,0) 黑(10,20,30) 红(40,50,60)
+function renderEnvHistoryCharts(tempData, humData, lightData, tempRange, humRange, lightRange) {
     const tempColors = ['#e74c3c', '#e74c3c', '#333', '#333', '#333', '#e74c3c', '#e74c3c', '#e74c3c'];
-    tempChart.setOption(buildStrictOption(tempXData, tempData, -10, 60, 10, tempColors), true);
+    tempChart.setOption(buildStrictOption(tempData, -10, 60, 10, tempColors, tempRange), true);
 
-    // 湿度: 30~90, 间隔10. 红(30,40) 黑(50,60,70) 红(80,90)
     const humColors = ['#e74c3c', '#e74c3c', '#333', '#333', '#333', '#e74c3c', '#e74c3c'];
-    humChart.setOption(buildStrictOption(humXData, humData, 30, 90, 10, humColors), true);
+    humChart.setOption(buildStrictOption(humData, 30, 90, 10, humColors, humRange), true);
 
-    // 光照: 修复min为0，适配低光照数据，间隔10000
     const lightColors = ['#e74c3c', '#e74c3c', '#e74c3c', '#333', '#333', '#333', '#333', '#e74c3c', '#e74c3c'];
-    lightChart.setOption(buildStrictOption(lightXData, lightData, 0, 90000, 10000, lightColors), true);
+    lightChart.setOption(buildStrictOption(lightData, 0, 90000, 10000, lightColors, lightRange), true);
 }
 
-// 3. 渲染西瓜阵列
 function renderWatermelonGrid(wmList) {
     const container = document.getElementById('wm-grid-container');
     container.innerHTML = '';
-    
     if(wmList.length === 0) return;
 
     wmList.forEach(wm => {
-        // 成熟度换算百分比
         let matPercent = Math.round(wm.maturity_score * 100);
-        
         const card = document.createElement('div');
         card.className = `wm-item`;
-        // 渲染与UI图一致的卡片
         card.innerHTML = `
             <div class="wm-id">${wm.device_id}</div>
             <div class="wm-status">成熟(${matPercent}%)</div>
             <div class="wm-data">${wm.sugar_brix.toFixed(1)} Brix</div>
         `;
-        
         card.onclick = () => {
             document.querySelectorAll('.wm-item').forEach(el => el.classList.remove('active'));
             card.classList.add('active');
-            
-            // 记录选中的西瓜ID，供数据刷新使用
             window.currentSelectedWmId = wm.device_id;
-            // 触发数据重载
             if(window.reloadAllChartsData) window.reloadAllChartsData();
-            
             resetIdleTimer();
         };
         container.appendChild(card);
