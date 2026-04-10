@@ -157,15 +157,17 @@ window.reloadAllChartsData = async function() {
         const jsonEnv = await resEnv.json();
         if (jsonEnv.code === 200) {
             const rawData = jsonEnv.data;
-            const tempTimes = generateTimeLabels(scales.temp);
-            const humTimes = generateTimeLabels(scales.hum);
-            const lightTimes = generateTimeLabels(scales.light);
+            // 每个图表用自己的scale生成x轴和数据
+            const tempTimes = generateTimeLabels(scales.temp, rawData);
+            const humTimes = generateTimeLabels(scales.hum, rawData);
+            const lightTimes = generateTimeLabels(scales.light, rawData);
 
             const tempData = processChartData(rawData, scales.temp, 'temperature');
             const humData = processChartData(rawData, scales.hum, 'humidity');
             const lightData = processChartData(rawData, scales.light, 'light');
             
-            renderEnvHistoryCharts(tempTimes, tempData, humTimes, lightTimes);
+            // 调用修复后的渲染函数，入参顺序完全匹配
+            renderEnvHistoryCharts(tempTimes, humTimes, lightTimes, tempData, humData, lightData);
         }
 
         // 请求单个西瓜糖度数据
@@ -173,7 +175,7 @@ window.reloadAllChartsData = async function() {
             const resWm = await fetch(`/api/admin/watermelon/history?device_id=${window.currentSelectedWmId}`);
             const jsonWm = await resWm.json();
             if (jsonWm.code === 200) {
-                const sugarTimes = generateTimeLabels(scales.sugar);
+                const sugarTimes = generateTimeLabels(scales.sugar, jsonWm.data);
                 const sugarData = processChartData(jsonWm.data, scales.sugar, 'sugar_brix');
                 renderWmHistoryChart(sugarTimes, sugarData, window.currentSelectedWmId, 12.5);
             }

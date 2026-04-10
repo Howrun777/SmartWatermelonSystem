@@ -91,19 +91,19 @@ function renderWmHistoryChart(xData, yData, deviceId, maturityThreshold = 12.5) 
     wmHistoryChart.setOption(buildStrictOption(xData, yData, 0, 16, 2, colors, maturityThreshold), true);
 }
 
-// 2. 渲染三个环境图表
-function renderEnvHistoryCharts(xData, tempData, humData, lightData) {
+// 2. 渲染三个环境图表（修复入参顺序，支持独立x轴）
+function renderEnvHistoryCharts(tempXData, humXData, lightXData, tempData, humData, lightData) {
     // 温度: -10~60, 间隔10. 红(-10,0) 黑(10,20,30) 红(40,50,60)
     const tempColors = ['#e74c3c', '#e74c3c', '#333', '#333', '#333', '#e74c3c', '#e74c3c', '#e74c3c'];
-    tempChart.setOption(buildStrictOption(xData, tempData, -10, 60, 10, tempColors), true);
+    tempChart.setOption(buildStrictOption(tempXData, tempData, -10, 60, 10, tempColors), true);
 
     // 湿度: 30~90, 间隔10. 红(30,40) 黑(50,60,70) 红(80,90)
     const humColors = ['#e74c3c', '#e74c3c', '#333', '#333', '#333', '#e74c3c', '#e74c3c'];
-    humChart.setOption(buildStrictOption(xData, humData, 30, 90, 10, humColors), true);
+    humChart.setOption(buildStrictOption(humXData, humData, 30, 90, 10, humColors), true);
 
-    // 光照: 10000~90000, 间隔10000. 红(1w,2w,3w) 黑(4w,5w,6w,7w) 红(8w,9w)
+    // 光照: 修复min为0，适配低光照数据，间隔10000
     const lightColors = ['#e74c3c', '#e74c3c', '#e74c3c', '#333', '#333', '#333', '#333', '#e74c3c', '#e74c3c'];
-    lightChart.setOption(buildStrictOption(xData, lightData, 10000, 90000, 10000, lightColors), true);
+    lightChart.setOption(buildStrictOption(lightXData, lightData, 0, 90000, 10000, lightColors), true);
 }
 
 // 3. 渲染西瓜阵列
