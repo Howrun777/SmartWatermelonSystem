@@ -76,6 +76,11 @@
             <button class="switch-btn" onclick="switchField(1)">下一瓜田 ▶</button>
         </div>
         <div style="display: flex; align-items: center;">
+            <!-- ✅ 新增强制刷新按钮 -->
+            <button class="switch-btn" style="background:#3498db; margin-right:20px;" onclick="forceRefresh()">
+                ↻ 刷新数据
+            </button>
+
             <div class="clock-container">
                 <div class="clock-date" id="sys-date">----/--/--</div>
                 <div class="clock-time" id="sys-time">--:--:--</div>

@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// 通用配置生成器：支持连续时间轴 (type: 'time')
+// 通用配置生成器：支持连续时间轴 + 强制精确刻度 + 红色标记点
 function buildStrictOption(data, min, max, interval, colorsArray, timeRange, threshold = null) {
     let option = {
         grid: { left: '8%', right: '4%', bottom: '15%', top: '10%' },
@@ -26,26 +26,26 @@ function buildStrictOption(data, min, max, interval, colorsArray, timeRange, thr
             axisPointer: { type: 'line' }
         },
         xAxis: { 
-            type: 'time', // ✅ 核心改变：连续时间轴
-            min: timeRange.min, // 动态限制视口左边界
-            max: timeRange.max, // 动态限制视口右边界
-            splitNumber: 12,    // 期望显示 12 个刻度
+            type: 'time', 
+            min: timeRange.min, 
+            max: timeRange.max, 
+            interval: timeRange.interval, // ✅ 核心修复：强行夺回控制权，强制使用我们计算好的毫秒间隔
             axisTick: { show: false }, 
             axisLine: { show: false },
             axisLabel: {
+                hideOverlap: true, // 防止极端小屏幕下的文字重叠
                 formatter: function (value) {
-                    // 根据视口跨度智能显示时间格式
                     let date = new Date(value);
                     let M = (date.getMonth() + 1).toString().padStart(2, '0');
                     let d = date.getDate().toString().padStart(2, '0');
                     let h = date.getHours().toString().padStart(2, '0');
                     let m = date.getMinutes().toString().padStart(2, '0');
                     
-                    let durationHours = (timeRange.max - timeRange.min) / (1000 * 3600);
-                    if (durationHours > 24) {
-                        return `${M}.${d}`; // 天/周级别显示 月.日
+                    // 根据毫秒间隔判断显示 时:分 还是 月.日
+                    if (timeRange.interval >= 24 * 3600 * 1000) {
+                        return `${M}.${d}`; 
                     } else {
-                        return `${h}:${m}`; // 分钟/小时级别显示 时:分
+                        return `${h}:${m}`; 
                     }
                 }
             }
@@ -64,12 +64,14 @@ function buildStrictOption(data, min, max, interval, colorsArray, timeRange, thr
         },
         series: [{
             type: 'line',
-            data: data, // ✅ 格式为 [[时间戳, 值], [时间戳, 值]...]
+            data: data, 
             smooth: false,
-            showSymbol: false,
-            connectNulls: false, // 数据断档时不强制连线
-            lineStyle: { color: '#2c3e50', width: 2.5 }, // 你的深灰色线条
-            itemStyle: { color: '#888' },
+            showSymbol: true,          // ✅ 核心修复1：显示数据点
+            symbol: 'circle',          // ✅ 核心修复2：设置为圆形
+            symbolSize: 6,             // 点的大小
+            itemStyle: { color: '#e74c3c' }, // ✅ 核心修复3：红色数据点
+            lineStyle: { color: '#2c3e50', width: 2.5 }, // 深灰色折线
+            connectNulls: false
         }]
     };
 

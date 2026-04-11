@@ -3,7 +3,9 @@
 let currentFieldIndex = 0;
 let fieldList = [];
 let idleTimer = null;
-const IDLE_TIMEOUT = 60000; 
+let dataRefreshTimer = null; // ✅ 新增：专门用于后台静默刷新数据的定时器
+const IDLE_TIMEOUT = 60000;  // 60秒无操作切换瓜田
+const REFRESH_RATE = 6000;   // ✅ 新增：每 6 秒后台偷偷拉取一次最新数据
 
 const SCALE_NAMES = ["5分钟", "2小时", "1天", "1周"];
 let scales = { sugar: 0, temp: 0, hum: 0, light: 0 };
@@ -12,6 +14,7 @@ window.currentSelectedWmId = null;
 window.currentFieldId = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // 监听用户交互
     document.addEventListener('mousemove', resetIdleTimer);
     document.addEventListener('mousedown', resetIdleTimer);
     document.addEventListener('keypress', resetIdleTimer);
@@ -20,11 +23,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (fieldList.length > 0) {
         loadFieldData(currentFieldIndex);
         startAutoSwitch();
+        startDataRefresh(); // ✅ 启动后台静默刷新
     } else {
         document.getElementById('field-info-display').innerHTML = `<span style="color:red;">未查询到任何瓜田信息</span>`;
     }
 });
 
+// ====== 基础控制逻辑 ======
+
+// ✅ 用户点击“强制刷新”按钮
+window.forceRefresh = function() {
+    console.log("手动强制刷新数据！");
+    resetIdleTimer();
+    // 重新拉取当前瓜田和西瓜数据
+    loadFieldData(currentFieldIndex, true);
+}
+
+// 更改时间刻度
 function changeScale(scaleKey, step) {
     resetIdleTimer();
     let current = scales[scaleKey];
@@ -39,6 +54,7 @@ function changeScale(scaleKey, step) {
     }
 }
 
+// 切换瓜田
 function switchField(step) {
     if (fieldList.length === 0) return;
     resetIdleTimer();
@@ -47,8 +63,31 @@ function switchField(step) {
     loadFieldData(currentFieldIndex);
 }
 
-function resetIdleTimer() { clearTimeout(idleTimer); startAutoSwitch(); }
-function startAutoSwitch() { idleTimer = setTimeout(() => { switchField(1); }, IDLE_TIMEOUT); }
+// ====== 定时器管理 ======
+
+function resetIdleTimer() { 
+    clearTimeout(idleTimer); 
+    startAutoSwitch(); 
+}
+
+// 控制大屏切换的宏观定时器 (比如 60 秒不动就切下一个大棚)
+function startAutoSwitch() { 
+    idleTimer = setTimeout(() => { switchField(1); }, IDLE_TIMEOUT); 
+}
+
+// ✅ 控制数据刷新的微观定时器 (永远在后台 6 秒跑一次)
+function startDataRefresh() {
+    clearInterval(dataRefreshTimer);
+    dataRefreshTimer = setInterval(() => {
+        // 如果当前有选中的瓜田，就在后台悄悄拉取数据更新图表，不触发闪烁动画
+        if (window.currentFieldId) {
+            window.reloadAllChartsData();
+        }
+    }, REFRESH_RATE);
+}
+
+
+// ====== 网络请求与数据处理 ======
 
 async function fetchFieldList() {
     try {
@@ -58,7 +97,8 @@ async function fetchFieldList() {
     } catch (e) { console.error("获取列表失败", e); }
 }
 
-async function loadFieldData(index) {
+// loadFieldData 增加了一个 isForce 参数，防止强制刷新时重置你选中的西瓜
+async function loadFieldData(index, isForce = false) {
     const fieldId = fieldList[index];
     window.currentFieldId = fieldId;
     document.getElementById('field-info-display').innerHTML = `当前查看：<span style="color:#f1c40f;">瓜田 ${fieldId}</span> (${index + 1}/${fieldList.length})`;
@@ -68,49 +108,53 @@ async function loadFieldData(index) {
         const jsonWm = await resWm.json();
         if (jsonWm.code === 200) {
             renderWatermelonGrid(jsonWm.data);
-            if (jsonWm.data.length > 0 && !window.currentSelectedWmId) {
+            
+            // 只有在非强制刷新，或者当前没有选中西瓜时，才默认选中第一个
+            if (jsonWm.data.length > 0 && (!window.currentSelectedWmId || !isForce)) {
                 window.currentSelectedWmId = jsonWm.data[0].device_id;
-                setTimeout(() => { document.querySelector('.wm-item').classList.add('active'); }, 50);
             }
+            
+            // 重新挂载高亮样式
+            setTimeout(() => { 
+                const cards = document.querySelectorAll('.wm-item');
+                cards.forEach(card => {
+                    if (card.querySelector('.wm-id').innerText === window.currentSelectedWmId) {
+                        card.classList.add('active');
+                    }
+                });
+            }, 50);
         }
         window.reloadAllChartsData();
     } catch (e) { console.error("加载数据失败", e); }
 }
 
-// ====== 核心修改：动态视口计算 ======
-
-// 根据刻度级别，计算当前的 X 轴边界 (返回毫秒级时间戳)
+// 根据刻度级别，计算当前的 X 轴边界
 function getTimeRange(scaleLevel) {
     let now = new Date().getTime(); 
-    let past = now;
+    let interval = 0;
     
-    // 刻度: 0=5min(视口1小时), 1=2h(视口24小时), 2=1d(视口12天), 3=1week(视口84天)
-    if (scaleLevel === 0) past = now - (60 * 60 * 1000); 
-    else if (scaleLevel === 1) past = now - (24 * 60 * 60 * 1000); 
-    else if (scaleLevel === 2) past = now - (12 * 24 * 60 * 60 * 1000); 
-    else if (scaleLevel === 3) past = now - (84 * 24 * 60 * 60 * 1000); 
+    if (scaleLevel === 0) interval = 5 * 60 * 1000;              // 5分钟
+    else if (scaleLevel === 1) interval = 2 * 60 * 60 * 1000;    // 2小时
+    else if (scaleLevel === 2) interval = 24 * 60 * 60 * 1000;   // 1天
+    else if (scaleLevel === 3) interval = 7 * 24 * 60 * 60 * 1000; // 1周
     
-    return { min: past, max: now };
+    let past = now - (11 * interval); 
+    return { min: past, max: now, interval: interval };
 }
 
 window.reloadAllChartsData = async function() {
     if (!window.currentFieldId) return;
 
     try {
-        // 请求环境数据 (获取所有84天的全量数据)
         const resEnv = await fetch(`/api/admin/field/environment?field_id=${window.currentFieldId}`);
         const jsonEnv = await resEnv.json();
         
         if (jsonEnv.code === 200) {
             const rawData = jsonEnv.data;
-            
-            // ✅ 直接提取数据为 ECharts 'time' 轴所需的 [[毫秒时间戳, 值], ...] 格式
-            // 不做任何平均运算，保持绝对真实！
             const tempData = rawData.map(d => [d.timestamp * 1000, d.temperature]);
             const humData = rawData.map(d => [d.timestamp * 1000, d.humidity]);
             const lightData = rawData.map(d => [d.timestamp * 1000, d.light]);
             
-            // 获取每个图表当前的视口范围
             const tempRange = getTimeRange(scales.temp);
             const humRange = getTimeRange(scales.hum);
             const lightRange = getTimeRange(scales.light);
@@ -118,7 +162,6 @@ window.reloadAllChartsData = async function() {
             renderEnvHistoryCharts(tempData, humData, lightData, tempRange, humRange, lightRange);
         }
 
-        // 请求单个西瓜糖度数据
         if (window.currentSelectedWmId) {
             const resWm = await fetch(`/api/admin/watermelon/history?device_id=${window.currentSelectedWmId}`);
             const jsonWm = await resWm.json();
