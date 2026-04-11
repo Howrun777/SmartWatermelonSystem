@@ -50,15 +50,7 @@ void Router::registerRoutes(httplib::Server& svr) {
             int light = body.value("light", 99);
             auto spectrum = body["spectrum_json"]; 
 
-            // [2] 环境数据校验
-            if (!DataCheck::isEnvironmentValid(temp, hum, light)) {
-                response["code"] = 400;
-                response["msg"] = "环境数据无效";
-                res.set_content(response.dump(), "application/json");
-                return;
-            }
-
-            // [3] 瓜田号校验
+            // [2] 瓜田号合法性校验 (必须存在，否则西瓜也存不了成熟度)
             std::string field_id = device_id.substr(0, 4);
             if (!DataCheck::isFieldExist(field_id)) {
                 response["code"] = 400;
@@ -67,35 +59,46 @@ void Router::registerRoutes(httplib::Server& svr) {
                 return;
             }
 
-            // [4] 核心算法计算
+            // [3] 核心算法计算 (西瓜数据永远计算)
             double sugar_brix = SugarCalc::calculate(spectrum);
             double maturity_score = MaturityCalc::calculate(field_id, sugar_brix);
             
-            // [5] 延顺入库机制处理
             auto now = std::chrono::system_clock::now();
             long long collected_at = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
             
+            // [4] 组装西瓜写入 SQL (永远写入)
             std::string sql_w = "INSERT INTO watermelon_data (device_id, collected_at, sugar_brix, maturity_score, spectrum_json) VALUES ('" 
                 + device_id + "', " + std::to_string(collected_at) + ", " + std::to_string(sugar_brix) + ", " 
                 + std::to_string(maturity_score) + ", '" + spectrum.dump() + "')";
 
-            std::string sql_e = "INSERT INTO field_environment (field_id, collected_at, temperature_c, humidity_rh, light_lux) VALUES ('" 
-                + field_id + "', " + std::to_string(collected_at) + ", " + std::to_string(temp) + ", " 
-                + std::to_string(hum) + ", " + std::to_string(light) + ")";
+            bool w_ok = MySQLDriver::getInstance().execute(sql_w);
+            bool e_ok = true; // 环境数据默认成功（如果没传环境，就不算失败）
+            std::string extra_msg = "";
 
-            // 注意：如果并发插入报错主键冲突，数据库操作直接 return false。这里简化处理，毕设阶段直接执行即可。
-            if (MySQLDriver::getInstance().execute(sql_w) && MySQLDriver::getInstance().execute(sql_e)) {
+            // [5] 环境数据的柔性写入逻辑
+            // 只有当环境数据有效时（不全为99），才执行环境库插入
+            if (DataCheck::isEnvironmentValid(temp, hum, light)) {
+                std::string sql_e = "INSERT INTO field_environment (field_id, collected_at, temperature_c, humidity_rh, light_lux) VALUES ('" 
+                    + field_id + "', " + std::to_string(collected_at) + ", " + std::to_string(temp) + ", " 
+                    + std::to_string(hum) + ", " + std::to_string(light) + ")";
+                e_ok = MySQLDriver::getInstance().execute(sql_e);
+            } else {
+                extra_msg = " (⚠️检测到无环境传感器，已跳过环境数据保存)";
+            }
+
+            // [6] 返回响应
+            if (w_ok && e_ok) {
                 response["code"] = 200;
-                response["msg"] = "数据上传成功";
+                response["msg"] = "数据上传成功" + extra_msg;
                 response["data"]["sugar_brix"] = sugar_brix;
                 response["data"]["maturity_score"] = maturity_score;
             } else {
                 response["code"] = 500;
-                response["msg"] = "数据库写入失败";
+                response["msg"] = "部分数据库写入失败，可能因为时间戳冲突";
             }
         } catch (const std::exception& e) {
             response["code"] = 400;
-            response["msg"] = std::string("系统异常: ") + e.what();
+            response["msg"] = std::string("系统异常或JSON格式错误: ") + e.what();
         }
 
         res.set_content(response.dump(), "application/json");

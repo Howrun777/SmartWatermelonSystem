@@ -2,91 +2,87 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>瓜田监测大屏 - SmartWatermelonSystem</title>
+    <title>瓜田大屏 - SmartWatermelon</title>
     <script src="../assets/libs/echarts.min.js"></script>
     <link rel="stylesheet" href="css/style.css">
     <style>
-        .dashboard-container { display: flex; height: 100vh; background-color: #f4f3ec; /* 偏暖色背景匹配你的UI */ overflow: hidden; color: #333;}
-        .top-navbar { position: absolute; top: 0; left: 0; width: 100%; height: 60px; background-color: #2e7d32; color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; z-index: 1000; }
-        .logout-btn { background: transparent; border: 1px solid white; color: white; padding: 5px 15px; border-radius: 5px; cursor: pointer; transition: 0.3s;}
-        .logout-btn:hover { background: rgba(255,255,255,0.2); }
-        .main-content { margin-top: 60px; display: flex; width: 100%; height: calc(100vh - 60px); padding: 15px; gap: 15px; }
+        .dashboard-container { display: flex; height: 100vh; background-color: #f4f7f6; overflow: hidden; color: #2c3e50;}
         
-        /* 左右分栏布局与边框 */
-        .left-panel { flex: 4; display: flex; flex-direction: column; gap: 15px; border: 4px solid #3fd1e8; border-radius: 8px; padding: 10px; background: white;}
-        .right-panel { flex: 5; display: flex; flex-direction: column; gap: 15px; overflow-y: hidden; }
+        /* 导航栏毛玻璃高级质感 */
+        .top-navbar { position: absolute; top: 0; left: 0; width: 100%; height: 65px; background: rgba(27, 94, 32, 0.95); backdrop-filter: blur(10px); color: white; display: flex; justify-content: space-between; align-items: center; padding: 0 25px; z-index: 1000; box-shadow: 0 2px 10px rgba(0,0,0,0.1);}
+        .logout-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 6px 15px; border-radius: 6px; cursor: pointer; transition: 0.3s; font-weight: 600;}
+        .logout-btn:hover { background: rgba(231,76,60,0.9); border-color: transparent; }
         
-        .card { background: #faf9f4; border: 4px solid #3fd1e8; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; position: relative;}
+        .main-content { margin-top: 65px; display: flex; width: 100%; height: calc(100vh - 65px); padding: 20px; gap: 20px; }
         
-        /* 隐藏右侧三个图表的边框，保持你的UI风格 */
-        .right-panel .card { flex: 1; border: 4px solid #3fd1e8; padding: 5px; }
+        /* 左右面板白底阴影柔和风格 */
+        .left-panel { flex: 4; display: flex; flex-direction: column; gap: 20px; background: white; border-radius: 12px; padding: 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.03);}
+        .right-panel { flex: 5; display: flex; flex-direction: column; gap: 20px; overflow-y: hidden; }
+        .card { background: white; border-radius: 12px; padding: 15px; display: flex; flex-direction: column; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.03);}
+        .right-panel .card { flex: 1; padding: 10px; }
 
-        .card-title { font-size: 1rem; font-weight: bold; margin-bottom: 5px; color: #000; padding-left: 5px;}
+        /* 标题带炫酷指示条 */
+        .card-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 5px; color: #2c3e50; display: flex; align-items: center; gap: 10px;}
+        .card-title::before { content: ''; display: inline-block; width: 4px; height: 16px; background: var(--primary-color); border-radius: 2px;}
         
-        /* 时间刻度控制组件 */
-        .scale-control { 
-            position: absolute; top: 10px; right: 15px; 
-            display: flex; align-items: center; gap: 5px; 
-            background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 2px;
-            z-index: 10;
-        }
-        .scale-control button { 
-            background: #f0f0f0; border: none; cursor: pointer; padding: 2px 8px; border-radius: 3px; font-size: 0.8rem; color: #555;
-        }
-        .scale-control button:hover { background: #ddd; color: #000; }
-        .scale-control span { font-size: 0.85rem; color: #555; width: 100px; text-align: center; }
+        /* 统计徽章 */
+        .summary-badge { background: #fdf0ed; color: #e74c3c; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: bold; border: 1px solid #fadbd8;}
 
-        /* 西瓜阵列与美化滚动条 */
-        .watermelon-grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); 
-            gap: 10px; 
-            overflow-y: auto; 
-            flex-grow: 1; 
-            max-height: 45vh; 
-            padding-right: 5px;
-            align-content: start; /* 👈 新增这行，禁止垂直拉伸，向上对齐 */
-        }
-        .watermelon-grid::-webkit-scrollbar { width: 8px; }
-        .watermelon-grid::-webkit-scrollbar-track { background: #eee; border-radius: 4px; }
-        .watermelon-grid::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+        /* 时间刻度按钮美化 */
+        .scale-control { position: absolute; top: 10px; right: 15px; display: flex; align-items: center; gap: 5px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 3px; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.02);}
+        .scale-control button { background: white; border: 1px solid #e2e8f0; cursor: pointer; padding: 3px 10px; border-radius: 4px; font-size: 0.8rem; color: #64748b; font-weight: bold; transition: 0.2s;}
+        .scale-control button:hover { background: var(--primary-color); color: white; border-color: var(--primary-color);}
+        .scale-control span { font-size: 0.8rem; color: #475569; width: 90px; text-align: center; font-weight: 600;}
 
-        /* 西瓜卡片 */
-        .wm-item { border: 2px solid #ffb6b9; border-radius: 0; padding: 10px; text-align: center; cursor: pointer; background: #fae3d9; }
-        .wm-item:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); border-color: #e74c3c;}
-        .wm-item.active { border: 3px solid #e74c3c; background: #f8d0d2; }
-        .wm-id { font-weight: bold; font-size: 1rem; color: #333; margin-bottom: 5px;}
-        .wm-status { font-size: 0.9rem; color: #333; }
-        .wm-data { font-size: 1.1rem; color: #333; margin-top: 5px;}
+        /* 西瓜卡片质感升级 */
+        .watermelon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; overflow-y: auto; flex-grow: 1; max-height: 45vh; padding-right: 5px; align-content: start;}
+        .watermelon-grid::-webkit-scrollbar { width: 6px; }
+        .watermelon-grid::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
+        .watermelon-grid::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        
+        .wm-item { border: 2px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; cursor: pointer; background: #ffffff; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 2px 8px rgba(0,0,0,0.02);}
+        .wm-item:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(46,204,113,0.15); border-color: #2ecc71;}
+        .wm-item.active { border: 2px solid #2ecc71; background: #f0fdf4; box-shadow: 0 4px 12px rgba(46,204,113,0.2);}
+        .wm-id { font-weight: 800; font-size: 0.95rem; color: #1e293b; margin-bottom: 8px;}
+        .wm-status { font-size: 0.8rem; font-weight: bold; padding: 3px 8px; border-radius: 12px; display: inline-block;}
+        .wm-data { font-size: 1.25rem; color: #0f172a; margin-top: 8px; font-weight: 800;}
+        .wm-data small { font-size: 0.7rem; color: #94a3b8; font-weight: 600;}
+        
+        .status-ripe { background: #fee2e2; color: #ef4444; }
+        .status-unripe { background: #fef9c3; color: #ca8a04; }
 
         .chart-container { flex-grow: 1; width: 100%; min-height: 200px; }
-        .switch-btn { background: #f39c12; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
-        .switch-btn:hover { background: #d68910; }
-        .clock-container { text-align: right; margin-right: 20px; line-height: 1.2;}
-        .clock-date { font-size: 0.85rem; color: #ddd; }
-        .clock-time { font-size: 1.2rem; font-weight: bold; font-family: monospace;}
+        
+        /* 顶部控制台精细化 */
+        .switch-btn { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: 0.2s;}
+        .switch-btn:hover { background: white; color: #1b5e20; }
+        .refresh-btn { background: #3498db !important; border-color: #2980b9 !important; box-shadow: 0 0 10px rgba(52,152,219,0.4);}
+        .refresh-btn:hover { background: #2980b9 !important; color: white !important;}
+        
+        .clock-container { text-align: right; margin-right: 20px; line-height: 1.1; display: flex; flex-direction: column; align-items: flex-end;}
+        .clock-date { font-size: 0.75rem; color: #a5d6a7; font-weight: 600;}
+        .clock-time { font-size: 1.1rem; font-weight: 800; font-family: 'Consolas', monospace; letter-spacing: 1px;}
+        .last-update { font-size: 0.75rem; color: #f1c40f; margin-right: 20px; font-weight: bold; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px;}
     </style>
 </head>
 <body>
     <div class="top-navbar">
-        <div style="font-size: 1.2rem; font-weight: bold;">🍉 瓜田监测可视化平台</div>
+        <div style="font-size: 1.3rem; font-weight: 800; letter-spacing: 0.5px;">🍉 IoT 监控大屏</div>
         <div style="display: flex; align-items: center; gap: 15px;">
-            <button class="switch-btn" onclick="switchField(-1)">◀ 上一瓜田</button>
-            <div style="font-size: 1.1rem; min-width: 200px; text-align: center;" id="field-info-display">加载中...</div>
-            <button class="switch-btn" onclick="switchField(1)">下一瓜田 ▶</button>
+            <button class="switch-btn" onclick="switchField(-1)">◀ 切换</button>
+            <div style="font-size: 1.1rem; min-width: 180px; text-align: center; font-weight: 700;" id="field-info-display">加载中...</div>
+            <button class="switch-btn" onclick="switchField(1)">切换 ▶</button>
         </div>
         <div style="display: flex; align-items: center;">
-            <!-- ✅ 新增强制刷新按钮 -->
-            <button class="switch-btn" style="background:#3498db; margin-right:20px;" onclick="forceRefresh()">
-                ↻ 刷新数据
-            </button>
+            <span id="last-update-text" class="last-update">数据已更新于 刚刚</span>
+            <button class="switch-btn refresh-btn" style="margin-right:20px;" onclick="forceRefresh()">↻ 强制刷新</button>
 
             <div class="clock-container">
                 <div class="clock-date" id="sys-date">----/--/--</div>
                 <div class="clock-time" id="sys-time">--:--:--</div>
             </div>
-            <span style="margin-right: 15px;">管理员：Admin</span>
-            <button class="logout-btn" onclick="logout()">退出系统</button>
+            <span style="margin-right: 15px; font-weight: 600; font-size: 0.9rem;">Admin</span>
+            <button class="logout-btn" onclick="logout()">注销</button>
         </div>
     </div>
 
@@ -94,20 +90,21 @@
         <div class="main-content">
             <!-- 左侧 -->
             <div class="left-panel">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div class="card-title" style="margin: 0;">阵列实时状态</div>
+                    <div class="summary-badge" id="wm-summary">总计: 0 | 已熟: 0</div>
+                </div>
                 <div class="watermelon-grid" id="wm-grid-container">
                     <div style="padding:20px; color:#999;">正在加载西瓜数据...</div>
                 </div>
                 <!-- 底部糖度图表 -->
-                <div style="border-top: 4px solid #3fd1e8; padding-top: 10px; position: relative;">
-                    <div class="card-title" id="wm-history-title">[设备编号]糖度历史变化</div>
-                    
-                    <!-- 替换这里的控制组件 -->
+                <div style="border-top: 1px solid #e2e8f0; padding-top: 15px; position: relative;">
+                    <div class="card-title" id="wm-history-title">[设备] 糖度历史</div>
                     <div class="scale-control">
                         <button onclick="changeScale('sugar', -1)">◀</button>
-                        <span id="text-sugar">时间刻度: 5分钟</span>
+                        <span id="text-sugar">刻度: 5分钟</span>
                         <button onclick="changeScale('sugar', 1)">▶</button>
                     </div>
-
                     <div class="chart-container" id="wmHistoryChart" style="min-height: 250px;"></div>
                 </div>
             </div>
@@ -115,33 +112,35 @@
             <!-- 右侧 -->
             <div class="right-panel">
                 <div class="card">
-                    <div class="card-title">温度历史变化(℃)</div>
+                    <div class="card-title">环境温度趋势 (℃)</div>
                     <div class="scale-control">
                         <button onclick="changeScale('temp', -1)">◀</button>
-                        <span id="text-temp">时间刻度: 5分钟</span>
+                        <span id="text-temp">刻度: 5分钟</span>
                         <button onclick="changeScale('temp', 1)">▶</button>
                     </div>
                     <div class="chart-container" id="tempChart"></div>
                 </div>
                 <div class="card">
-                    <div class="card-title">湿度历史变化(%)</div>
+                    <div class="card-title">环境湿度趋势 (%)</div>
                     <div class="scale-control">
                         <button onclick="changeScale('hum', -1)">◀</button>
-                        <span id="text-hum">时间刻度: 5分钟</span>
+                        <span id="text-hum">刻度: 5分钟</span>
                         <button onclick="changeScale('hum', 1)">▶</button>
                     </div>
                     <div class="chart-container" id="humChart"></div>
                 </div>
                 <div class="card">
-                    <div class="card-title">光照历史变化(Lux)</div>
+                    <div class="card-title">光照强度趋势 (Lux)</div>
                     <div class="scale-control">
                         <button onclick="changeScale('light', -1)">◀</button>
-                        <span id="text-light">时间刻度: 5分钟</span>
+                        <span id="text-light">刻度: 5分钟</span>
                         <button onclick="changeScale('light', 1)">▶</button>
                     </div>
                     <div class="chart-container" id="lightChart"></div>
                 </div>
             </div>
+        </div>
+    </div>
 
     <script src="js/chart.js"></script>
     <script src="js/auto_switch.js"></script>

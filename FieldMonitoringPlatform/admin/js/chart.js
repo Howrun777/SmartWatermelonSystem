@@ -136,24 +136,37 @@ function renderEnvHistoryCharts(tempData, humData, lightData, tempRange, humRang
 function renderWatermelonGrid(wmList) {
     const container = document.getElementById('wm-grid-container');
     container.innerHTML = '';
-    if(wmList.length === 0) return;
+    
+    // ✅ 新增：统计计算
+    let ripeCount = 0;
+    
+    if(wmList.length === 0) {
+        document.getElementById('wm-summary').innerText = `总计: 0 | 已熟: 0`;
+        return;
+    }
 
     wmList.forEach(wm => {
         let matPercent = Math.round(wm.maturity_score * 100);
+        const isRipe = wm.maturity_score >= 1.0;
+        if (isRipe) ripeCount++; // 累加成熟数
+        
         const card = document.createElement('div');
         card.className = `wm-item`;
         card.innerHTML = `
             <div class="wm-id">${wm.device_id}</div>
-            <div class="wm-status">成熟(${matPercent}%)</div>
-            <div class="wm-data">${wm.sugar_brix.toFixed(1)} Brix</div>
+            <div class="wm-status ${isRipe ? 'status-ripe' : 'status-unripe'}">${isRipe ? '成熟' : '生长'}(${matPercent}%)</div>
+            <div class="wm-data">${wm.sugar_brix.toFixed(1)} <small>Brix</small></div>
         `;
         card.onclick = () => {
             document.querySelectorAll('.wm-item').forEach(el => el.classList.remove('active'));
             card.classList.add('active');
             window.currentSelectedWmId = wm.device_id;
             if(window.reloadAllChartsData) window.reloadAllChartsData();
-            resetIdleTimer();
+            if(window.resetIdleTimer) window.resetIdleTimer();
         };
         container.appendChild(card);
     });
+    
+    // ✅ 更新标题栏的统计徽章
+    document.getElementById('wm-summary').innerText = `总计: ${wmList.length} | 已熟: ${ripeCount}`;
 }
