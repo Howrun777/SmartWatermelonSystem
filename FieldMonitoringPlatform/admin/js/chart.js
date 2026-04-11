@@ -23,25 +23,54 @@ function buildStrictOption(data, min, max, interval, colorsArray, timeRange, thr
         grid: { left: '8%', right: '4%', bottom: '15%', top: '10%' },
         tooltip: { 
             trigger: 'axis',
-            axisPointer: { type: 'line' }
+            axisPointer: { type: 'line' },
+            formatter: function (params) {
+                // params 是当前鼠标悬浮点的数据数组
+                if (!params || params.length === 0) return '';
+                
+                // params[0].value[0] 就是那串巨大的毫秒时间戳数字
+                let date = new Date(params[0].value[0]);
+                let Y = date.getFullYear();
+                let M = date.getMonth() + 1;
+                let d = date.getDate();
+                let h = date.getHours().toString().padStart(2, '0');
+                let m = date.getMinutes().toString().padStart(2, '0');
+                let s = date.getSeconds().toString().padStart(2, '0');
+                
+                // 拼接出你想要的精美时间格式
+                let timeStr = `${Y}年${M}月${d}日 ${h}:${m}:${s}`;
+                
+                // 构造弹出框的 HTML
+                let html = `<div style="font-size:0.9rem; color:#666; margin-bottom:5px;">${timeStr}</div>`;
+                params.forEach(param => {
+                    // param.marker 是对应颜色的圆点，param.value[1] 是 Y轴 的数值
+                    let val = param.value[1];
+                    // 如果数值有小数，保留一位小数，更美观
+                    if (typeof val === 'number' && !Number.isInteger(val)) val = val.toFixed(1);
+                    
+                    html += `<div>${param.marker} ${param.seriesName}: <span style="font-weight:bold; color:#333;">${val}</span></div>`;
+                });
+                return html;
+            }
         },
         xAxis: { 
-            type: 'time', 
+            type: 'value', // ✅ 核心降维打击：从 'time' 改成 'value' 纯数值轴
             min: timeRange.min, 
             max: timeRange.max, 
-            interval: timeRange.interval, // ✅ 核心修复：强行夺回控制权，强制使用我们计算好的毫秒间隔
+            interval: timeRange.interval, // 现在 ECharts 必须严格执行这个间隔，不敢少画一根线
             axisTick: { show: false }, 
             axisLine: { show: false },
             axisLabel: {
-                hideOverlap: true, // 防止极端小屏幕下的文字重叠
+                showMinLabel: true, // 强制显示最左侧刻度
+                showMaxLabel: true, // 强制显示最右侧刻度
                 formatter: function (value) {
+                    // 因为是 value 轴，传进来的是纯数字毫秒数，我们需要自己把它转换成时间文本
                     let date = new Date(value);
                     let M = (date.getMonth() + 1).toString().padStart(2, '0');
                     let d = date.getDate().toString().padStart(2, '0');
                     let h = date.getHours().toString().padStart(2, '0');
                     let m = date.getMinutes().toString().padStart(2, '0');
                     
-                    // 根据毫秒间隔判断显示 时:分 还是 月.日
                     if (timeRange.interval >= 24 * 3600 * 1000) {
                         return `${M}.${d}`; 
                     } else {
