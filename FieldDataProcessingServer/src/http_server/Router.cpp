@@ -66,10 +66,15 @@ void Router::registerRoutes(httplib::Server& svr) {
             auto now = std::chrono::system_clock::now();
             long long collected_at = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
             
+            // ✅ 防 SQL 注入：转义外部输入的字符串
+            std::string safe_device_id = MySQLDriver::getInstance().escapeString(device_id);
+            std::string safe_field_id = MySQLDriver::getInstance().escapeString(field_id);
+            std::string safe_spectrum = MySQLDriver::getInstance().escapeString(spectrum.dump());
+
             // [4] 组装西瓜写入 SQL (永远写入)
             std::string sql_w = "INSERT INTO watermelon_data (device_id, collected_at, sugar_brix, maturity_score, spectrum_json) VALUES ('" 
-                + device_id + "', " + std::to_string(collected_at) + ", " + std::to_string(sugar_brix) + ", " 
-                + std::to_string(maturity_score) + ", '" + spectrum.dump() + "')";
+                + safe_device_id + "', " + std::to_string(collected_at) + ", " + std::to_string(sugar_brix) + ", " 
+                + std::to_string(maturity_score) + ", '" + safe_spectrum + "')";
 
             bool w_ok = MySQLDriver::getInstance().execute(sql_w);
             bool e_ok = true; // 环境数据默认成功（如果没传环境，就不算失败）
@@ -79,7 +84,7 @@ void Router::registerRoutes(httplib::Server& svr) {
             // 只有当环境数据有效时（不全为99），才执行环境库插入
             if (DataCheck::isEnvironmentValid(temp, hum, light)) {
                 std::string sql_e = "INSERT INTO field_environment (field_id, collected_at, temperature_c, humidity_rh, light_lux) VALUES ('" 
-                    + field_id + "', " + std::to_string(collected_at) + ", " + std::to_string(temp) + ", " 
+                    + safe_field_id + "', " + std::to_string(collected_at) + ", " + std::to_string(temp) + ", " 
                     + std::to_string(hum) + ", " + std::to_string(light) + ")";
                 e_ok = MySQLDriver::getInstance().execute(sql_e);
             } else {

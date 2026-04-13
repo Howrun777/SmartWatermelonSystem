@@ -5,7 +5,8 @@
 #include <iostream>
 
 std::string AdminAuth::login(const std::string& username, const std::string& password) {
-    std::string sql = "SELECT password_hash FROM admin_users WHERE username = '" + username + "'";
+    std::string safe_user = MySQLDriver::getInstance().escapeString(username); // 防注入
+    std::string sql = "SELECT password_hash FROM admin_users WHERE username = '" + safe_user + "'";
     auto result = MySQLDriver::getInstance().query(sql);
     
     if (result.empty()) return ""; // 账号不存在

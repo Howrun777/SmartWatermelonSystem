@@ -64,3 +64,22 @@ std::vector<std::map<std::string, std::string>> MySQLDriver::query(const std::st
     mysql_free_result(res);
     return result_list;
 }
+
+// 过滤外部字符串，防止 SQL 注入
+std::string MySQLDriver::escapeString(const std::string& str) {
+    std::lock_guard<std::mutex> lock(mtx);
+    if (!conn) return str;
+    
+    // MySQL 转义后的字符串长度最多是原字符串的 2 倍 + 1
+    char* buffer = new char[str.length() * 2 + 1];
+    mysql_real_escape_string(
+        conn,           // [输入] MySQL 连接句柄
+        buffer,         // [输出] 转义后的结果缓冲区
+        str.c_str(),    // [输入] 原始字符串
+        str.length()    // [输入] 原始字符串的长度
+    );
+    std::string escaped(buffer);
+    delete[] buffer;
+    
+    return escaped;
+}
