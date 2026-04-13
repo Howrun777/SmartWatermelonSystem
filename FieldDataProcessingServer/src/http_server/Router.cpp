@@ -29,14 +29,27 @@ void Router::registerRoutes(httplib::Server& svr) {
         res.set_content(R"({"msg": "pong", "status": "success"})", "application/json");
     });
 
-    // 设备上传接口 (重构后)
+    // ✅ 新增：设备开机时间握手接口
+    svr.Get("/api/device/time", [](const httplib::Request& req, httplib::Response& res) {
+        json response;
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        response["code"] = 200;
+        response["msg"] = "时间同步成功";
+        response["data"]["server_time"] = now; // 返回秒级时间戳
+        
+        res.set_content(response.dump(), "application/json");
+    });
+    // 设备上传接口 (重构支持离线时间戳与授时反馈)
     svr.Post("/api/device/upload", [](const httplib::Request& req, httplib::Response& res) {
         json response;
+        // 获取服务器当前时间 (用于授时和兜底)
+        auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
         try {
             std::string device_id = req.has_header("device_id") ? req.get_header_value("device_id") : "";
             std::string token = req.has_header("token") ? req.get_header_value("token") : "";
 
-            // [1] 设备认证
             if (!DeviceAuth::authenticate(device_id, token)) {
                 response["code"] = 401;
                 response["msg"] = "认证失败：Token错误、设备不存在或已被禁用";
@@ -49,8 +62,13 @@ void Router::registerRoutes(httplib::Server& svr) {
             double hum = body.value("humidity", 99.0);
             int light = body.value("light", 99);
             auto spectrum = body["spectrum_json"]; 
+            
+            // 核心修改：优先从 JSON body 中读取设备自身记录的时间戳 (离线补发必备)
+            long long collected_at = body.value("collected_at", 0LL);
+            if (collected_at <= 0) {
+                collected_at = now; // 如果 JSON 里没传时间，就用服务器当前时间兜底
+            }
 
-            // [2] 瓜田号合法性校验 (必须存在，否则西瓜也存不了成熟度)
             std::string field_id = device_id.substr(0, 4);
             if (!DataCheck::isFieldExist(field_id)) {
                 response["code"] = 400;
@@ -59,47 +77,39 @@ void Router::registerRoutes(httplib::Server& svr) {
                 return;
             }
 
-            // [3] 核心算法计算 (西瓜数据永远计算)
             double sugar_brix = SugarCalc::calculate(spectrum);
             double maturity_score = MaturityCalc::calculate(field_id, sugar_brix);
             
-            auto now = std::chrono::system_clock::now();
-            long long collected_at = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-            
-            // ✅ 防 SQL 注入：转义外部输入的字符串
             std::string safe_device_id = MySQLDriver::getInstance().escapeString(device_id);
             std::string safe_field_id = MySQLDriver::getInstance().escapeString(field_id);
             std::string safe_spectrum = MySQLDriver::getInstance().escapeString(spectrum.dump());
 
-            // [4] 组装西瓜写入 SQL (永远写入)
             std::string sql_w = "INSERT INTO watermelon_data (device_id, collected_at, sugar_brix, maturity_score, spectrum_json) VALUES ('" 
                 + safe_device_id + "', " + std::to_string(collected_at) + ", " + std::to_string(sugar_brix) + ", " 
                 + std::to_string(maturity_score) + ", '" + safe_spectrum + "')";
 
             bool w_ok = MySQLDriver::getInstance().execute(sql_w);
-            bool e_ok = true; // 环境数据默认成功（如果没传环境，就不算失败）
+            bool e_ok = true; 
             std::string extra_msg = "";
 
-            // [5] 环境数据的柔性写入逻辑
-            // 只有当环境数据有效时（不全为99），才执行环境库插入
             if (DataCheck::isEnvironmentValid(temp, hum, light)) {
                 std::string sql_e = "INSERT INTO field_environment (field_id, collected_at, temperature_c, humidity_rh, light_lux) VALUES ('" 
                     + safe_field_id + "', " + std::to_string(collected_at) + ", " + std::to_string(temp) + ", " 
                     + std::to_string(hum) + ", " + std::to_string(light) + ")";
                 e_ok = MySQLDriver::getInstance().execute(sql_e);
             } else {
-                extra_msg = " (⚠️检测到无环境传感器，已跳过环境数据保存)";
+                extra_msg = " (⚠️无环境传感器，跳过环境保存)";
             }
 
-            // [6] 返回响应
             if (w_ok && e_ok) {
                 response["code"] = 200;
                 response["msg"] = "数据上传成功" + extra_msg;
                 response["data"]["sugar_brix"] = sugar_brix;
                 response["data"]["maturity_score"] = maturity_score;
+                response["data"]["server_time"] = now; // ✅ 每次通信顺便把最新服务器时间发给设备校准
             } else {
                 response["code"] = 500;
-                response["msg"] = "部分数据库写入失败，可能因为时间戳冲突";
+                response["msg"] = "部分数据库写入失败，可能是离线补发时间戳重复";
             }
         } catch (const std::exception& e) {
             response["code"] = 400;
