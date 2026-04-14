@@ -40,6 +40,7 @@ void Router::registerRoutes(httplib::Server& svr) {
         
         res.set_content(response.dump(), "application/json");
     });
+
     // 设备上传接口 (重构支持离线时间戳与授时反馈)
     svr.Post("/api/device/upload", [](const httplib::Request& req, httplib::Response& res) {
         json response;
@@ -66,7 +67,7 @@ void Router::registerRoutes(httplib::Server& svr) {
             // 核心修改：优先从 JSON body 中读取设备自身记录的时间戳 (离线补发必备)
             long long collected_at = body.value("collected_at", 0LL);
             if (collected_at <= 0) {
-                collected_at = now; // 如果 JSON 里没传时间，就用服务器当前时间兜底
+                collected_at = now; 
             }
 
             std::string field_id = device_id.substr(0, 4);
@@ -106,7 +107,7 @@ void Router::registerRoutes(httplib::Server& svr) {
                 response["msg"] = "数据上传成功" + extra_msg;
                 response["data"]["sugar_brix"] = sugar_brix;
                 response["data"]["maturity_score"] = maturity_score;
-                response["data"]["server_time"] = now; // ✅ 每次通信顺便把最新服务器时间发给设备校准
+                response["data"]["server_time"] = now; 
             } else {
                 response["code"] = 500;
                 response["msg"] = "部分数据库写入失败，可能是离线补发时间戳重复";
@@ -118,7 +119,8 @@ void Router::registerRoutes(httplib::Server& svr) {
 
         res.set_content(response.dump(), "application/json");
     });
-// ========== Web 端接口 ==========
+
+    // ========== Web 端接口 ==========
 
     // 1. 管理员登录接口
     svr.Post("/api/admin/login", [](const httplib::Request& req, httplib::Response& res) {
@@ -133,7 +135,6 @@ void Router::registerRoutes(httplib::Server& svr) {
                 response["code"] = 200;
                 response["msg"] = "登录成功";
                 response["role"] = 0;
-                // 设置 Cookie 返回给浏览器
                 res.set_header("Set-Cookie", "session_id=" + session_id + "; Path=/; HttpOnly; Max-Age=3600");
             } else {
                 response["code"] = 401;
@@ -148,7 +149,6 @@ void Router::registerRoutes(httplib::Server& svr) {
     // 2. 瓜田列表查询接口 (需要鉴权)
     svr.Get("/api/admin/field/list", [](const httplib::Request& req, httplib::Response& res) {
         json response;
-        // 简易拦截器：从 Cookie 中提取 session_id 并校验
         std::string cookie = req.has_header("Cookie") ? req.get_header_value("Cookie") : "";
         std::string sid = "";
         size_t pos = cookie.find("session_id=");
@@ -159,7 +159,6 @@ void Router::registerRoutes(httplib::Server& svr) {
             res.set_content(response.dump(), "application/json"); return;
         }
 
-        // 校验通过，查询数据库
         auto db_res = MySQLDriver::getInstance().query("SELECT field_id, watermelon_variety FROM field_production");
         json field_list = json::array();
         for (const auto& row : db_res) {
@@ -173,14 +172,17 @@ void Router::registerRoutes(httplib::Server& svr) {
     });
 
     svr.Options(R"(.*)", [](const httplib::Request& req, httplib::Response& res) {
-        // ... (跨域代码保持不变) ...
+        res.set_header("Access-Control-Allow-Origin", "*");
+        res.set_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.set_header("Access-Control-Allow-Headers", "Content-Type, device_id, token");
     });
-     // 1. 官网首页 (完全公开)
+
+    // 1. 官网首页 (完全公开)
     svr.Get("/", [](const httplib::Request& req, httplib::Response& res) {
         res.set_content(readFile("../../FieldMonitoringPlatform/index.html"), "text/html; charset=utf-8");
     });
     svr.Get("/index.html", [](const httplib::Request& req, httplib::Response& res) {
-        res.set_redirect("/"); // 重定向到根目录
+        res.set_redirect("/"); 
     });
 
     // 2. 登录页面 (完全公开)
@@ -190,22 +192,16 @@ void Router::registerRoutes(httplib::Server& svr) {
 
     // 3. 核心大屏监控页 (【严格安全校验】)
     svr.Get("/admin/dashboard.html", [](const httplib::Request& req, httplib::Response& res) {
-        // 提取 Cookie 中的 session_id
         std::string cookie = req.has_header("Cookie") ? req.get_header_value("Cookie") : "";
         std::string sid = "";
         size_t pos = cookie.find("session_id=");
         if (pos != std::string::npos) sid = cookie.substr(pos + 11, 32);
 
-        // 核心拦截逻辑
         if (!Session::getInstance().isValid(sid)) {
-            // 如果没登录，或者 Session 过期了
             std::cout << "[Security] Unauthorized access to dashboard. Redirecting to login." << std::endl;
-            // 触发 HTTP 302 重定向，把非法的访客一脚踢回登录页
             res.set_redirect("/admin/login.html");
             return;
         }
-
-        // 校验通过，读取后台网页并返回给管理员
         res.set_content(readFile("../../FieldMonitoringPlatform/admin/dashboard.html"), "text/html; charset=utf-8");
     });
     
@@ -218,11 +214,13 @@ void Router::registerRoutes(httplib::Server& svr) {
             res.set_content(response.dump(), "application/json"); return;
         }
 
-        // 查询该瓜田下每个西瓜最新的一条数据 (利用 MAX 时间戳)
-        std::string sql = "SELECT a.device_id, a.sugar_brix, a.maturity_score FROM watermelon_data a "
+        std::string safe_field = MySQLDriver::getInstance().escapeString(field_id);
+        
+        // ✅ 核心修复：把 a.collected_at 加进 SELECT 语句
+        std::string sql = "SELECT a.device_id, a.sugar_brix, a.maturity_score, a.collected_at FROM watermelon_data a "
                           "INNER JOIN (SELECT device_id, MAX(collected_at) as max_time FROM watermelon_data GROUP BY device_id) b "
                           "ON a.device_id = b.device_id AND a.collected_at = b.max_time "
-                          "WHERE a.device_id LIKE '" + field_id + "-%'";
+                          "WHERE a.device_id LIKE '" + safe_field + "-%'";
         
         auto db_res = MySQLDriver::getInstance().query(sql);
         json wm_list = json::array();
@@ -230,7 +228,9 @@ void Router::registerRoutes(httplib::Server& svr) {
             wm_list.push_back({
                 {"device_id", row.at("device_id")},
                 {"sugar_brix", std::stod(row.at("sugar_brix"))},
-                {"maturity_score", std::stod(row.at("maturity_score"))}
+                {"maturity_score", std::stod(row.at("maturity_score"))},
+                // ✅ 核心修复：把时间戳发送给前端，供前端判定是否掉线
+                {"collected_at", std::stoll(row.at("collected_at"))} 
             });
         }
         
@@ -244,10 +244,12 @@ void Router::registerRoutes(httplib::Server& svr) {
         std::string device_id = req.has_param("device_id") ? req.get_param_value("device_id") : "";
         
         auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-        long long seven_days_ago = now - 84 * 24 * 3600; // 84天前的时间戳
+        long long seven_days_ago = now - 84 * 24 * 3600; 
+        
+        std::string safe_device = MySQLDriver::getInstance().escapeString(device_id);
         
         std::string sql = "SELECT collected_at, sugar_brix FROM watermelon_data "
-                          "WHERE device_id = '" + device_id + "' AND collected_at > " + std::to_string(seven_days_ago) + " "
+                          "WHERE device_id = '" + safe_device + "' AND collected_at > " + std::to_string(seven_days_ago) + " "
                           "ORDER BY collected_at ASC";
                           
         auto db_res = MySQLDriver::getInstance().query(sql);
@@ -271,8 +273,10 @@ void Router::registerRoutes(httplib::Server& svr) {
         auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
         long long seven_days_ago = now - 84 * 24 * 3600;
         
+        std::string safe_field = MySQLDriver::getInstance().escapeString(field_id);
+        
         std::string sql = "SELECT collected_at, temperature_c, humidity_rh, light_lux FROM field_environment "
-                          "WHERE field_id = '" + field_id + "' AND collected_at > " + std::to_string(seven_days_ago) + " "
+                          "WHERE field_id = '" + safe_field + "' AND collected_at > " + std::to_string(seven_days_ago) + " "
                           "ORDER BY collected_at ASC";
                           
         auto db_res = MySQLDriver::getInstance().query(sql);
@@ -290,5 +294,3 @@ void Router::registerRoutes(httplib::Server& svr) {
         res.set_content(response.dump(), "application/json");
     });
 }
-
-
