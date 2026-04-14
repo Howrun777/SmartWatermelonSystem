@@ -43,6 +43,25 @@
         .wm-item { border: 2px solid #e2e8f0; border-radius: 10px; padding: 12px; text-align: center; cursor: pointer; background: #ffffff; transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1); box-shadow: 0 2px 8px rgba(0,0,0,0.02);}
         .wm-item:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(46,204,113,0.15); border-color: #2ecc71;}
         .wm-item.active { border: 2px solid #2ecc71; background: #f0fdf4; box-shadow: 0 4px 12px rgba(46,204,113,0.2);}
+        /* ✅ 新增：掉线/超时警告卡片样式 */
+        .wm-item.offline { 
+            border: 2px dashed #e74c3c; 
+            background: #fff5f5; 
+            opacity: 0.8; /* 稍微变暗，表示不活跃 */
+        }
+        .wm-item.offline:hover { border-color: #c0392b; box-shadow: 0 8px 15px rgba(231,76,60,0.15); }
+        .wm-item.offline.active { border: 3px solid #e74c3c; background: #fee2e2; }
+        
+        /* ✅ 新增：掉线专属小提示文字 */
+        .wm-offline-alert {
+            font-size: 0.75rem;
+            color: #e74c3c;
+            font-weight: 800;
+            display: block;
+            margin-top: 5px;
+            animation: blink 2s infinite; /* 简单的闪烁动画吸引注意 */
+        }
+        @keyframes blink { 50% { opacity: 0.5; } }
         .wm-id { font-weight: 800; font-size: 0.95rem; color: #1e293b; margin-bottom: 8px;}
         .wm-status { font-size: 0.8rem; font-weight: bold; padding: 3px 8px; border-radius: 12px; display: inline-block;}
         .wm-data { font-size: 1.25rem; color: #0f172a; margin-top: 8px; font-weight: 800;}

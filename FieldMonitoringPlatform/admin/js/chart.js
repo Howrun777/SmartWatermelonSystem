@@ -137,7 +137,6 @@ function renderWatermelonGrid(wmList) {
     const container = document.getElementById('wm-grid-container');
     container.innerHTML = '';
     
-    // ✅ 新增：统计计算
     let ripeCount = 0;
     
     if(wmList.length === 0) {
@@ -145,18 +144,40 @@ function renderWatermelonGrid(wmList) {
         return;
     }
 
+    // 获取当前时间戳 (秒)
+    const currentUnixTime = Math.floor(new Date().getTime() / 1000);
+    const OFFLINE_THRESHOLD = 30 * 60; // 30 分钟 (1800秒)
+
     wmList.forEach(wm => {
         let matPercent = Math.round(wm.maturity_score * 100);
         const isRipe = wm.maturity_score >= 1.0;
-        if (isRipe) ripeCount++; // 累加成熟数
+        if (isRipe) ripeCount++;
+        
+        // ✅ 核心判断：检查是否超过 30 分钟未更新
+        // (兼容处理：如果后端没传 collected_at，默认为在线)
+        let isOffline = false;
+        if (wm.collected_at) {
+            isOffline = (currentUnixTime - wm.collected_at) > OFFLINE_THRESHOLD;
+        }
         
         const card = document.createElement('div');
-        card.className = `wm-item`;
-        card.innerHTML = `
+        // 如果掉线，追加 offline 专属类名
+        card.className = `wm-item ${isOffline ? 'offline' : ''}`;
+        
+        // 动态生成内部 HTML
+        let htmlContent = `
             <div class="wm-id">${wm.device_id}</div>
             <div class="wm-status ${isRipe ? 'status-ripe' : 'status-unripe'}">${isRipe ? '成熟' : '生长'}(${matPercent}%)</div>
             <div class="wm-data">${wm.sugar_brix.toFixed(1)} <small>Brix</small></div>
         `;
+        
+        // 如果掉线，在卡片底部追加一个闪烁的红色警告
+        if (isOffline) {
+            htmlContent += `<span class="wm-offline-alert">⚠️ 超时未更新</span>`;
+        }
+        
+        card.innerHTML = htmlContent;
+
         card.onclick = () => {
             document.querySelectorAll('.wm-item').forEach(el => el.classList.remove('active'));
             card.classList.add('active');
@@ -167,6 +188,5 @@ function renderWatermelonGrid(wmList) {
         container.appendChild(card);
     });
     
-    // ✅ 更新标题栏的统计徽章
     document.getElementById('wm-summary').innerText = `总计: ${wmList.length} | 已熟: ${ripeCount}`;
 }

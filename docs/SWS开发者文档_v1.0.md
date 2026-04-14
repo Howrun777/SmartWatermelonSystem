@@ -29,17 +29,22 @@
 SmartWatermelonSystem/  # 项目根目录
 ├── FieldAcquisitionTerminal/  # 设备端（ESP32）
 │   ├── src/
-│   │   ├── main.ino               # 主程序入口
-│   │   ├── sensor_driver/         # 传感器驱动
+│   │   ├── main.cpp               # 主程序入口 (ESP32 + Arduino框架)
+│   │   ├── config.h              # 设备配置（编号、Token、WiFi、服务器IP、引脚定义）
+│   │   ├── sensor_driver/         # 传感器驱动（统一由SensorManager管理）
+│   │   │   ├── SensorManager.cpp/h # 传感器统一管理（初始化/读取/控制）
 │   │   │   ├── AS7341.cpp/h       # 多光谱传感器
-│   │   │   ├── SHT31.cpp/h        # 温湿度传感器（SHT31，高精度±0.2℃）
-│   │   │   ├── BH1750.cpp/h       # 光照传感器
-│   │   │   └── LightControl.cpp/h  # 3W LED灯带控制（采集时开启，测完关闭）
-│   │   ├── display/               # TFT显示模块（LVGL图形库）
-│   │   │   └── lvgl_ui.cpp/h      # LVGL UI（支持6项数据同屏显示）
-│   │   ├── network/               # WiFi+HTTP上传
+│   │   │   ├── SHT31.cpp/h       # 温湿度传感器（SHT31，高精度±0.2℃）【可选】
+│   │   │   ├── BH1750.cpp/h       # 光照传感器【可选】
+│   │   │   ├── LightControl.cpp/h  # 3W LED灯带控制（采集时开启，测完关闭）
+│   │   │   └── RTCManager.cpp/h   # DS3231 RTC时钟管理【可选】
+│   │   ├── display/              # TFT显示模块（LVGL图形库）
+│   │   │   └── lvgl_ui.cpp/h     # LVGL UI（双模式界面：测试+工业）
+│   │   ├── network/              # WiFi+HTTP上传
 │   │   │   └── HttpClient.cpp/h
-│   │   └── algorithm/             # 本地糖度计算（MLR离线公式）
+│   │   ├── storage/              # 本地存储（LittleFS）
+│   │   │   └── StorageManager.cpp/h
+│   │   └── algorithm/            # 本地糖度计算（MLR离线公式）
 │   │       └── sugar_calc.cpp/h
 │   ├── config.h                   # 设备配置（编号、Token、服务器IP）
 │   ├── platformio.ini             # PIO 工程配置与依赖库管理
@@ -111,20 +116,49 @@ SmartWatermelonSystem/  # 项目根目录
 │  └─ 设置设备编号（瓜田号-瓜组-瓜号）、Device Token、服务器IP
 ├─ 传感器数据采集模块
 │  ├─ 多光谱采集（AS7341 → spectrum_json，12通道）
-│  ├─ 温湿度采集（SHT31 → 温度/湿度，高精度±0.2℃）
-│  └─ 光照采集（BH1750 → 光照强度）
+│  ├─ 温湿度采集（SHT31 → 温度/湿度，高精度±0.2℃）【可选】
+│  └─ 光照采集（BH1750 → 光照强度）【可选】
 ├─ 本地计算模块
 │  └─ 光谱数据 → 本地糖度（MLR离线公式，适合无网络场景）
 ├─ 本地显示模块（TFT+LVGL）
-│  └─ 2.8寸240*320 TFT屏，一屏显示6项数据（设备编号、光谱、温湿度光照、糖度）
+│  ├─ 开机登录页面（淡绿色背景，黑色字体）
+│  ├─ 测试模式页面（消费者模式）
+│  ├─ 工业模式页面（生产采集模式）
+│  └─ 历史数据表格显示
 ├─ 光源控制模块
 │  └─ 3W宽谱LED灯带（采集时开启，测完关闭，排除外界环境光干扰）
 ├─ 网络通信模块
-│  ├─ WiFi连接
-│  └─ HTTP数据上传（设备编号+光谱+温湿度+光照）
-└─ 数据上传策略模块（混合策略）
-   ├─ 环境数据：定时刷新（每1分钟上传一次）
-   └─ 西瓜光谱：事件驱动（按"开始检测"按钮 → 开灯→采集→上传→关灯）
+│  ├─ WiFi连接与重连机制（断线重连，每30秒）
+│  ├─ HTTP数据上传（设备编号+光谱+温湿度+光照）
+│  └─ 时间同步握手（首次联网获取服务器时间）
+├─ 蜂鸣器反馈模块【预留】
+│  ├─ WiFi连接成功提示（1秒蜂鸣）
+│  └─ 光谱检测完成提示（1秒蜂鸣）
+│  注：硬件支持 BUZZER=GPIO27，代码层尚未集成，可在后续版本完善
+├─ 时间管理模块
+│  ├─ DS3231 RTC时钟读取与写入【可选】
+│  ├─ 设备内部时间维护
+│  └─ 服务器时间校准
+├─ 本地存储模块
+│  ├─ 数据持久化存储（SPIFFS/LittleFS）
+│  ├─ 存储容量监测（低于20%自动清理）
+│  └─ 离线数据队列管理
+├─ 离线数据管理模块
+│  ├─ 离线数据标记与存储
+│  ├─ 网络恢复检测
+│  └─ 历史数据补发（随机延迟0~200秒）
+└─ 双模式系统
+   ├─ 测试模式（消费者模式）
+   │  ├─ 单次糖度检测
+   │  ├─ 内存历史数据（最多20条）
+   │  ├─ 累计均值计算
+   │  ├─ 成熟度百分比显示
+   │  └─ 清除按钮
+   └─ 工业模式（生产采集模式）
+      ├─ 自动定时检测（5分钟间隔）
+      ├─ 完整数据上传
+      ├─ 本地存储
+      └─ 历史记录表格
 ```
 
 ### 模块2：瓜田数据处理中心（FieldDataProcessingServer）
@@ -133,17 +167,21 @@ SmartWatermelonSystem/  # 项目根目录
 
 瓜田数据处理中心
 ├─ HTTP服务模块
-│  └─ 监听端口、解析请求、封装响应
+│  ├─ 监听端口、解析请求、封装响应
+│  └─ 静态文件托管（前端Web）
 ├─ 设备认证模块
-│  └─ 校验Header中device_id+token（device_auth表）
+│  ├─ 校验Header中device_id+token（device_auth表）
+│  └─ 设备状态校验（status=1）
 ├─ 数据接收模块
-│  └─ 接收5项上传数据：设备编号、光谱、温度、湿度、光照
+│  ├─ 接收上传数据：设备编号、光谱、温度、湿度、光照
+│  ├─ 从JSON读取数据采集时间戳（优先）
+│  └─ 备用：使用服务器收到时刻作为时间戳
 ├─ 数据校验模块
 │  ├─ 设备有效性校验（status=1）
-│  ├─ 环境数据校验（99无效+数值范围）
+│  ├─ 环境数据校验（三项不能全为99）
 │  └─ 瓜田号合法性校验（匹配生产信息表）
 ├─ 数据计算模块
-│  ├─ 光谱→糖度计算（MLR多元线性回归：Sugar = a*ch415 + b*ch445 + ... + K）
+│  ├─ 光谱→糖度计算（MLR多元线性回归：Sugar = 0.0012*ch415 + 0.0005*ch445 + 0.0021*ch480 + 5.2）
 │  └─ 糖度→成熟度计算（maturity_score = sugar_brix / mature_sugar_threshold）
 ├─ 数据库存储模块
 │  ├─ 西瓜信息表写入
@@ -151,11 +189,22 @@ SmartWatermelonSystem/  # 项目根目录
 │  ├─ 设备认证表管理
 │  ├─ 瓜田生产信息表管理
 │  └─ 管理员信息表管理
+├─ 时间同步服务模块
+│  ├─ 设备握手接口（GET /api/device/time）
+│  └─ 返回服务器当前时间戳
+├─ 响应时间戳模块
+│  └─ 每次响应加入server_time字段供设备校准
 ├─ 管理员认证模块
 │  ├─ 密码哈希（Argon2，防暴力破解/侧信道攻击）
 │  └─ Session+Cookie登录管理（1h过期）
 ├─ 接口服务模块
-│  └─ 为前端提供数据查询接口
+│  ├─ 设备数据上传接口（支持JSON时间戳）
+│  ├─ 设备时间同步接口
+│  ├─ 管理员登录/登出接口
+│  ├─ 瓜田列表查询接口
+│  ├─ 西瓜数据查询接口
+│  ├─ 环境数据查询接口
+│  └─ 历史数据查询接口
 └─ 日志模块
    └─ 错误日志、操作日志、数据日志
 ```
@@ -169,13 +218,18 @@ SmartWatermelonSystem/  # 项目根目录
 │  ├─ 产品介绍（背景/功能/开发者）
 │  └─ 后台登录入口
 ├─ 管理员登录模块
-│  └─ 账号密码验证、Session存储
+│  ├─ 账号密码验证、Session存储
+│  └─ Cookie会话管理
 ├─ 后台监控模块
 │  ├─ 左侧：西瓜数据阵列（编号/成熟度/糖度）
-│  ├─ 左侧：单西瓜历史糖度折线图
+│  ├─ 左侧：单西瓜历史数据表格（替代折线图）
 │  ├─ 右侧：瓜田环境折线图（温度/湿度/光照）
 │  ├─ 瓜田分页（当前瓜田/总数量）
 │  └─ 自动轮询（6s切换瓜田）
+├─ 历史数据展示模块
+│  ├─ 表格格式显示历史记录
+│  ├─ 字段：Time/Sugar/Temp/Hum/Light/上传状态
+│  └─ 上传状态标识（Y/N）
 └─ 数据交互模块
    └─ 与后端接口通信、实时刷新数据
 ```
@@ -207,7 +261,7 @@ SmartWatermelonSystem/  # 项目根目录
 | ------------- | ------------ | ----------------------------------------------------- | ------------------ |
 | id            | INT          | PRIMARY KEY, AUTO_INCREMENT                           | 主键，唯一标识            |
 | username      | VARCHAR(64)  | UNIQUE, NOT NULL                                      | 管理员账号（唯一）          |
-| password_hash | VARCHAR(255) | NOT NULL                                              | Argon2id 哈希后的密码    |
+| password_hash | VARCHAR(255) | NOT NULL                                              | libsodium Argon2id 哈希后的密码 |
 | role          | TINYINT      | NOT NULL, DEFAULT 1                                   | 角色：0=超级管理员，1=普通管理员 |
 | created_at    | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP                             | 创建时间               |
 | updated_at    | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新时间               |
@@ -229,7 +283,7 @@ CREATE TABLE admin_users (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 初始化超级管理员账号 (密码: admin123)
--- 密码哈希由 Argon2id(crypto_pwhash) 生成
+-- 密码哈希由 libsodium Argon2id (crypto_pwhash_out) 生成
 INSERT INTO admin_users (username, password_hash, role) VALUES
 ('admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4bAq/xxx', 0);
 ```
@@ -424,7 +478,7 @@ CREATE TABLE IF NOT EXISTS field_environment (
 -- ============================================
 
 -- 初始化超级管理员 (用户名: admin, 密码: admin123)
--- Argon2id hash 生成命令: echo -n "admin123" | argon2 salt -t 3 -m 65536 -p 4
+-- libsodium Argon2id hash 由应用程序首次启动时自动生成 (见 PasswordHasher.cpp)
 INSERT INTO admin_users (username, password_hash, role) VALUES
 ('admin', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4bAq/xxx-placeholder', 0);
 
@@ -490,9 +544,9 @@ max_connections = 10
 
 | 规则         | 说明                                                         |
 | ---------- | ---------------------------------------------------------- |
-| **环境数据无效** | 温度=99 AND 湿度=99 AND 光照=99 → 能接收但是无法入瓜田库, 同组信息的西瓜数据不受影响     |
+| **环境数据无效** | 温度=99 AND 湿度=99 AND 光照=99 → 环境数据跳过写入瓜田库，西瓜数据不受影响     |
 | **主键冲突解决** | 同一秒同一瓜田重复上传 → 时间戳+1秒后重试                                    |
-| **糖度计算算法** | MLR多元线性回归：Sugar = a×ch415 + b×ch445 + ... + K（系数由前期实验数据拟合） |
+| **糖度计算算法** | MLR多元线性回归：Sugar = 0.0012×ch415 + 0.0005×ch445 + 0.0021×ch480 + 5.2（系数由前期实验数据拟合） |
 | **成熟度计算**  | `maturity_score = sugar_brix / mature_sugar_threshold`     |
 | **设备禁用**   | `device_auth.status = 0` → HTTP 401 拒绝上传                   |
 | **瓜田号校验**  | 上传数据时必须校验瓜田号存在于 `field_production` 表                       |
@@ -510,7 +564,7 @@ max_connections = 10
 2. **数据格式**：请求/响应均为 `JSON`
 3. **服务端地址**：`http://{服务器IP}:{端口}`（默认8080）
 4. **设备编号规则**：`瓜田号-瓜组-瓜号`（例：1001-01-05）
-5. **时间戳**：服务端统一生成（秒级）
+5. **时间戳**：优先使用请求体JSON中的时间戳，其次使用服务器收到时刻（秒级）
 6. **状态码**：
   - 200：成功
     - 401：设备/管理员认证失败
@@ -544,7 +598,8 @@ max_connections = 10
   "spectrum_json": {"ch415":123,"ch445":456,"ch480":789}, // 多光谱数据
   "temperature": 25.5,    // 温度（无传感器=99）
   "humidity": 60.2,       // 湿度（无传感器=99）
-  "light": 10000          // 光照（无传感器=99）
+  "light": 10000,         // 光照（无传感器=99）
+  "collected_at": 1712345678  // 【可选】设备端采集时间戳，如不提供则使用服务器时间
 }
 ```
 
@@ -555,12 +610,15 @@ max_connections = 10
   4. 校验环境数据：
     - 规则1：温度/湿度/光照不能全为99
     - 规则2：数值范围（温度-4080℃、湿度0100%、光照0~65535Lux）
-  5. 生成**服务器时间戳**（主键冲突则+1s）
-  6. 计算糖度（MLR：Sugar = a×ch415 + b×ch445 + ... + K）→ 成熟度（糖度/成熟阈值）
-  7. 入库：
+  5. **获取数据采集时间戳**：
+    - 优先：从请求体JSON的`collected_at`字段读取
+    - 备用：使用服务器收到消息的当前时刻
+  6. 如遇主键冲突，时间戳+1秒
+  7. 计算糖度（MLR：Sugar = a×ch415 + b×ch445 + ... + K）→ 成熟度（糖度/成熟阈值）
+  8. 入库：
     - 西瓜信息表（设备编号+时间戳+糖度+成熟度+光谱）
     - 瓜田环境表（瓜田号+时间戳+温湿度+光照）
-  8. 返回响应
+  9. 返回响应
 - **成功响应（200）**：
 
 ```JSON
@@ -571,13 +629,43 @@ max_connections = 10
   "data": {
     "sugar_brix": 12.5,
     "maturity_score": 1.02,
-    "collected_at": 1712345678
+    "collected_at": 1712345678,
+    "server_time": 1712345679  // 服务器当前时间戳，供设备校准时间
   }
 }
 ```
 
 - **失败响应**：
   - 401：`{"code":401,"msg":"设备认证失败"}`
+  - 400：`{"code":400,"msg":"数据校验失败"}`
+
+#### 接口2：设备时间同步接口
+
+**核心作用**：设备首次联网时获取服务器当前时间，用于校准设备时间
+
+- **接口地址**：`/api/device/time`
+- **请求方式**：`GET`
+- **请求头（必传）**：
+
+
+| 参数名       | 类型     | 说明              |
+| --------- | ------ | --------------- |
+| device_id | String | 设备编号（瓜田号-瓜组-瓜号） |
+| token     | String | 设备唯一认证Token     |
+
+
+- **服务端业务逻辑**：
+  1. 校验`device_id+token` → 匹配`device_auth`表且`status=1`
+  2. 返回服务器当前时间戳
+- **成功响应（200）**：
+
+```JSON
+
+{
+  "code": 200,
+  "server_time": 1712345678
+}
+```
 
 ---
 
@@ -672,7 +760,7 @@ max_connections = 10
 - **环境数据无效**：温湿度光照全为99 → 400拒绝入库
 - **主键冲突**：同一秒同一瓜田 → 时间戳+1s
 - **成熟度计算**：`成熟度 = 计算糖度 / 瓜田成熟糖度阈值`
-- **糖度算法**：`Sugar = a×ch415 + b×ch445 + ... + K`（MLR多元线性回归，系数由实验数据拟合）
+- **糖度算法**：`Sugar = 0.0012×ch415 + 0.0005×ch445 + 0.0021×ch480 + 5.2`
 - **设备禁用**：`device_auth`表`status=0` → 401拒绝上传
 
 ---
@@ -749,9 +837,10 @@ max_connections = 10
 | TFT_DC    | GPIO21  | 数据/命令选择 |
 | TFT_RST   | GPIO22  | 复位      |
 | TFT_BL    | GPIO4   | 背光控制    |
-| SDA       | GPIO21  | I2C数据线  |
+| SDA       | GPIO27  | I2C数据线  |
 | SCL       | GPIO22  | I2C时钟线  |
 | LED_POWER | GPIO26  | LED灯带控制 |
+| BUZZER    | GPIO27  | 蜂鸣器控制（预留） |
 
 
 #### I2C 总线接线（所有传感器共用）
