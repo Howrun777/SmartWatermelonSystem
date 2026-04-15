@@ -1,238 +1,200 @@
-开发者文档-智能西瓜无损糖度检测系统SmartWatermelonSystem
-概括:
-我需要做一个毕业设计题目是：智能西瓜无损糖度检测系统
-这个系统要能够检测西瓜的糖度，检测环境的温度，湿度，光照强度，然后这些数据需要被上传到服务器的数据库中存储和处理，然后展示在web页面中进行监控；
+# SmartWatermelonSystem 需求文档
 
-设备端即"瓜田环境采集终端FieldAcquisitionTerminal"，直接体现它部署在瓜田、负责采集环境数据的核心作用。
-服务器处理端即"瓜田数据处理中心FieldDataProcessingServer"，突出它接收、校验、存储数据的核心功能。
-网页显示端即"瓜田监测可视化平台FieldMonitoringPlatform"，明确它面向用户、以图表等可视化方式展示数据的定位。
+> 毕业设计项目：智能西瓜无损糖度检测系统
+>
+> 本文档严格按照实际代码实现编写，完整覆盖设备端、后端服务器、前端三个模块的所有功能。
 
-### 系统新增功能概览
+---
 
-1. **时间同步机制**：设备支持DS3231 RTC模块和WiFi服务器握手两种时间同步方式
-2. **蜂鸣器反馈**：WiFi连接成功和光谱检测完成时蜂鸣器提示
-3. **离线数据存储**：设备可本地存储数据，网络恢复后自动补发
-4. **双模式系统**：测试模式（消费者使用）和工业模式（生产采集）
-5. **传感器解耦**：环境传感器可选，不影响核心功能
-6. **Web界面美化**：历史数据表格展示，优化用户体验
+## 一、项目概述
 
-### 新增硬件模块
+本系统旨在解决传统西瓜成熟度检测中破坏性强、抽检局限的问题。通过多光谱传感器与物联网技术，实现瓜田环境的实时监控与西瓜糖度的精准无损检测，并将数据上传至云端服务器，最终在 Web 端以可视化大屏呈现。
 
-- **RTC实时时钟**：DS3231模块，用于断电后保持时间
-- **蜂鸣器**：用于操作反馈提示
+系统分为三大模块：
 
-### 新增设备功能
+| 模块 | 名称 | 职责 | 技术栈 |
+|---|---|---|---|
+| 感知层 | 瓜田环境采集终端 FieldAcquisitionTerminal | 数据采集（光谱/温湿度/光照）、本地显示、HTTP上传 | ESP32、LVGL、I2C传感器 |
+| 服务层 | 瓜田数据处理中心 FieldDataProcessingServer | 设备认证、数据接收、校验、计算（糖度/成熟度）、MySQL存储 | C++、cpp-httplib、MySQL、libsodium |
+| 应用层 | 瓜田监测可视化平台 FieldMonitoringPlatform | 前台展示、登录鉴权、数据可视化、自动轮询监控大屏 | HTML/CSS/JS、ECharts、Cookie |
 
-#### 开机时间同步流程
-1. 尝试向DS3231模块获取当前时间
-2. 尝试连接WIFI，连接成功后自动和服务器握手获取最新时间
-3. 如果既没有DS3231也没有连接上Wifi，则卡在登录系统界面，提示"正在等待时间更新"，但可以进入测试模式
-4. 时间同步成功后，显示测试模式和工业模式两个按钮
+---
 
-#### 登录页面显示
-- 设备编号
-- 西瓜种类
-- 正在时间更新...
-- 西瓜智能糖度检测系统设计者：Howrun
-- 背景颜色：淡绿色
-- 字体颜色：黑色
+## 二、模块一：设备端（FieldAcquisitionTerminal）
 
-#### 蜂鸣器功能
-- 成功连上WIFI后响一声，持续1秒
-- 成功检测西瓜光谱数据后响一声，持续1秒
+### 2.1 硬件配置
 
-#### 自动检测与上传
-- 设备每过5分钟自动检测一次，并上传到服务器
+| 硬件 | 型号/规格 | 说明 |
+|---|---|---|
+| 主控芯片 | ESP32 DevKit V1 | 双核240MHz，WiFi+蓝牙 |
+| 多光谱传感器 | GY-AS7341-V1 | 11通道（8可见光+白光+近红外），I2C地址0x39 |
+| 温湿度传感器 | SHT31 | 精度±0.2℃，I2C地址0x44/0x45（可选） |
+| 光照传感器 | BH1750 | 量程0~65535 Lux，I2C地址0x23/0x5C（可选） |
+| 光源 | 3W宽谱白光LED | GPIO26驱动（三极管开关），采集时开启 |
+| 实时时钟 | DS3231 | I2C，断电保持（可选） |
+| 蜂鸣器 | 有源蜂鸣器 | GPIO26，低电平触发 |
+| 显示屏 | 2.8寸TFT ILI9341 + XPT2046触摸 | SPI接口，240×320分辨率 |
 
-#### 离线数据存储
-- 设备断网后可继续离线使用，不发送数据给后端
-- 离线时向磁盘存入数据，记录时间戳，标记未上传
-- 离线时每隔30秒尝试连接一次Wifi
-- 连上网络后检测本地磁盘是否存在未上传数据，如有则上传
-- 补发旧数据时随机延迟0~200秒，防止高并发
-- 新数据上传优先级高于老数据
-- 每次发送完数据后从后端返回的HTTP报文中校准时间
+### 2.2 设备配置（config.h）
 
-#### 本地数据存储
-- 存储内容：数据采集时间戳、糖度数据、环境数据、光谱数据
-- 存储限制：当设备剩余存储空间低于20%时自动清理数据
-- 清理策略：释放一半的历史记录
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| DEVICE_ID | "1001-01-01" | 瓜田号-瓜组-瓜号 |
+| DEVICE_TOKEN | "device-token-001" | 设备认证令牌 |
+| SERVER_URL | "http://47.107.41.102:8080/api/device/upload" | 后端地址 |
+| ENV_UPDATE_INTERVAL | 2000 ms | 环境数据采集间隔 |
+| AUTO_UPLOAD_INTERVAL | 300000 ms（5分钟） | 自动上传间隔 |
 
-#### 传感器解耦
-- SHT31和BH1750传感器为可选配置
-- 任一传感器未装入时，3项环境数据都写成99
-- 不因传感器缺失而拒绝发送数据
-- 测试模式不需要环境数据，可节省成本
+### 2.3 传感器管理模块（SensorManager）
 
-模块1-设备端:
-设备端主要作为数据的采集端,负责把数据采样后发送给服务器处理,在设备端同时也支持本地处理数据,但是web网页终端以服务器数计算数据为主,设备端数据处理结果仅用于离线状态临时使用
-1.设备端硬件搭配:
-(1)主控:ESP32开发板WiFi蓝牙2.8寸240*320智能显示屏TFT模块触摸屏幕LVGL
-(2)多光谱传感器:GY-AS7341-V1
-(3)温湿度传感器:SHT31
-(4)光照传感器:BH1750
-(5)强光光源:3W 宽谱LED灯带
+- **begin()**：初始化I2C总线、检测AS7341/SHT31/BH1750是否在线、配置AS7341（ATIME=50/ASTEP=999/GAIN=256X）
+- **readEnvironment(float &temp, float &hum, int &light)**：读取SHT31温湿度+BH1750光照；传感器缺失时返回99.0/99占位
+- **readSpectrum(JsonObject &doc)**：调用AS7341读取10通道数据（ch415/ch445/ch480/ch515/ch555/ch595/ch640/ch680/Clear/NIR），写入JSON对象
 
-2.功能:
-(1)可以设置本设备的编号: 瓜田号-瓜组-瓜号
-(2)本地采集西瓜的光谱数据spectrum_json,计算出糖度
-(3)本地采集3种环境数据:温度,湿度,光照强度数据;
-//原始数据就四种:光谱数据spectrum_json,温度,湿度,光照
-(4)在本地设备的OLED屏幕上显示6项数据: 设备编号,光谱数据spectrum_json,温度,湿度,光照强度,糖度数据;
-(5)把5项数据(设备编号,光谱数据spectrum_json,温度,湿度,光照强度)使用HTTP封装,发送到服务器所在的IP:Port;
-(6)本地数据发送到云端采取事件驱动型策略?/定时刷新策略?
-(7)不一定每一个设备都有环境数据监测器,如果设备没有监测器,则3项数据都写成99,在服务端规定检查到三项数据都是99则此设备环境数据无效;
+### 2.4 本地糖度计算（sugar_calc.h）
 
+使用MLR多元线性回归模型（系数由前期标定实验拟合）：
 
+```
+Sugar = 0.0012 × ch415 + 0.0005 × ch445 + 0.0021 × ch480 + 5.2
+```
 
+结果限制在0.0~20.0 Brix范围。
 
-模块2-后端服务器:
-硬件设施: 
-服务器是一个2核2G的云服务器;
-编程语言是C++;
-网络传输协议是Http;
-数据库使用MySql;
+### 2.5 双模式系统
 
-后端服务器的功能结构
-1. 数据接收与管理:
-(1)设备上传数据后，第一步先校验 HTTP Header 中的 Device Token：
-a.解析 Header 中的 device_id 和 token；
-b.查询 device_auth 表，校验 token 是否匹配、status 是否为 1（启用）；
-c.认证失败直接返回 HTTP 401 Unauthorized，不进入后续数据处理。
-(2)接收来自硬件设备的5项数据:
-设备编号(瓜田号-瓜组-瓜号,每一个西瓜对应一个设备,用于区分西瓜所在瓜田和管理西瓜);
-光谱数据spectrum_json(用于给服务器计算当前西瓜的糖度,以及成熟度,存入西瓜信息表);
-温度(存入瓜田环境信息表);
-湿度(存入瓜田环境信息表);
-光照强度(存入瓜田环境信息表);
+#### 2.5.1 测试模式（消费者模式）
 
-(3)服务端自己创建数据:
-数据时间戳(服务器在接收到ESP32上传的环境数据时，自动生成并记录当前时间戳，并且同时存入西瓜信息表和瓜田环境信息存储表)
-糖度(由光谱数据spectrum_json计算获得,存入西瓜信息表)
-当前成熟度(由糖度计算获得,存入西瓜信息表)
+- 单次手动触发糖度检测
+- 内存存储最多20条历史记录（不掉盘）
+- 实时计算并显示：糖度、成熟度百分比、累计均值
+- 不上传数据到服务器
+- 环境数据固定为99（不采集）
+- 提供清除历史按钮
 
+#### 2.5.2 工业模式（生产采集模式）
 
-2. Mysql数据库存储:
+- 5分钟自动定时检测
+- 每次测量完成后立即上传到服务器
+- 完整采集环境数据（温度/湿度/光照）
+- 数据持久化到LittleFS
+- 实时倒计时显示距下次自动采集的时间
+- 历史记录表格显示（Time/Brix/Temp/Hum/Light/Upload Status）
 
-2.1网页端管理员信息表: 用于web的后台登录校验
-主键:id
-字段:
-(1)Id(满足数据库设计的 "主键规范"，确保每条记录都有唯一身份)
-(2)Username(作为管理员登录系统的 "身份凭证"配合 UNIQUE 约束，防止出现重复的账号名)
-(3)password_hash(不直接存储管理员输入的明文密码（如 123456），而是存储经过 SHA-256 等算法加密后的 "乱码")
-(4)role(角色：0= 超级管理员，1= 普通管理员)
-值为 0（超级管理员）：拥有最高权限，除了查看西瓜 / 瓜田数据，还能 "创建新的普通管理员" 或 "删除普通管理员"。
-值为 1（普通管理员）：权限受限，只能登录后台查看西瓜糖度、瓜田环境等数据，无法进行账号管理操作。
+### 2.6 时间管理模块（RTCManager，单例）
 
-2.2设备校验表device_auth :
-主键:设备编号
-字段:
-(1)device_id（设备编号）
-(2)token（唯一 Token）
-(3)status（是否有效,某个瓜收割了,把对应设备的状态关掉）
+- **getTimestamp()**：优先从DS3231读取；降级使用ESP32内部`gettimeofday()`
+- **syncTime(server_time)**：同时更新ESP32系统时钟和DS3231硬件时钟
+- **formatTime(timestamp)**：UTC+8小时偏移，格式`YYYY/MM/DD HH:mm:ss`
+- 设备端发起HTTP上传时在请求体中附加`collected_at`字段（优先采用），若无则由服务器生成时间戳
 
-2.3西瓜信息表:
-联合主键:设备编号+数据采集时间戳
-字段:
-(1)设备编号(device_id)(瓜田号-瓜组-瓜号)(由硬件端发送获得,对应瓜号,1设备1瓜)
-(2)数据采集时间戳(collected_at)(由服务器提供, 方便后续分析数据变化趋势,服务器在接收到ESP32上传的环境数据时，自动生成并记录当前时间戳，而不是由设备端提供时间)
-(3)当前成熟度(maturity_score)(0.0->1.x)(由服务器计算得到, 1.x代表在已成熟1.0的基础上更熟的程度)
-(4)当前糖度(sugar_brix)(由服务器计算得到)
-(5)光谱数据(spectrum_json)(由硬件端发送获得,用于服务端计算糖度数据)
-注意: AS7341 是多通道传感器（8+4 个光通道），需结构化存储才能计算糖度。
-存储格式为 JSON 字符串（如 {"ch415": 123, "ch445": 456, "ch480": 789, ...}），包含 AS7341 所有通道的原始值。
+### 2.7 网络通信模块（NetworkManager，静态工具类）
 
-2.4瓜田的生产信息表:
-主键:瓜田号
-字段:
-(1)瓜田号(field_id)(由生产者注册, 服务器解析瓜田号,用于查找瓜的成熟糖度阈值值S,然后用此值计算当前西瓜的成熟度)
-(2)瓜的品种(watermelon_variety)(由生产者注册,生产者决定这个瓜田的品种,此值会用于显示在web页面)
-(3)此品种成熟糖度阈值值S(mature_sugar_threshold)(由生产者自己注册,服务器读取其用于计算每个品种瓜的当前成熟度)
-注意:
-瓜田号,瓜的品种和成熟度是强相关的,生产者自己决定此瓜田种什么瓜,以及此品种的成熟糖度,生产者自己必须提前注册好所有瓜田的生产信息)
+- **connectWiFi()**：非阻塞连接，最多等待10秒；超时时设备进入离线模式
+- **maintainWiFi()**：断线后每30秒自动重连（非阻塞）
+- **fetchServerTime()**：GET `/api/device/time`，返回服务器Unix时间戳（秒）
+- **uploadData(payload)**：POST JSON到服务器，响应中提取`server_time`供校时
 
-2.5瓜田的环境信息表:
-联合主键:瓜田号+数据采集时间戳
-字段:
-(1)瓜田号(field_id)(从设备上传的设备编号（瓜田号-瓜组-瓜号）中解析校验提取)
-(2)数据采集时间戳(collected_at)(由服务器提供, 方便后续分析数据变化趋势,服务器在接收到ESP32上传的环境数据时，自动生成并记录当前时间戳，而不是由设备端提供时间)
-注意:
-瓜田环境表主键冲突（严重 BUG）:同一秒内多个设备上传同一瓜田数据 → 主键重复 → 数据插入失败
-解决方案:不修改数据库结构、保留原联合主键（瓜田号 + 时间戳），仅在服务器端给「同一秒重复」的时间戳强制 + 1 秒
-(3)瓜田温度(temperature_c)(由硬件设备端提供,服务器端接收并存储入库)
-(4)瓜田湿度(humidity_rh)(由硬件设备端提供,服务器端接收并存储入库)
-(5)光照强度(light_lux)(由硬件设备端提供,服务器端接收并存储入库)
-注意: 环境信息表只需要提前定义好字段结构，不用提前初始化数据, 在ESP32上传环境数据时，程序先校验这个瓜田号是否存在于生产信息表。如果存在，就直接把环境数据写入环境信息表；如果不存在，就记录警告日志。这样既不用手动维护环境表的瓜田号，又能保证数据合法性，还节省了提前初始化的步骤。每次设备上传数据，直接往表里插入新记录就行。
+### 2.8 本地存储模块（StorageManager，单例）
 
+基于LittleFS，JSON Lines格式存储：
 
-3. 数据处理:
+- **saveRecord(ts, brix, t, h, l, spec, is_uploaded)**：追加写入`/records.jsonl`
+- **checkAndCleanCapacity()**：已用容量>80%时删除最早的50%记录
+- **getUnuploadedRecord(doc, ts)**：顺序返回第一条`up=0`的记录
+- **markAsUploaded(target_ts)**：将指定时间戳记录的`up`字段从0改为1
 
-3.1西瓜数据处理:
-(1)西瓜的糖度计算
-服务端根据设备端传入的光谱数据spectrum_json, 计算糖度值;
+### 2.9 离线数据补发机制
 
-(2)西瓜的当前成熟程度计算
-a.根据此瓜的设备编号(瓜田号-瓜组-瓜号)查询瓜田生产信息表, 获取到此瓜所在的瓜田的成熟糖度阈值mature_sugar_threshold;
-b.再根据服务端计算出的糖度值sugar_brix, 计算此瓜的成熟程度maturity_score
-c.将当前成熟程度存放进入数据库
-当前成熟度计算规则: 当前成熟程度sugar_brix = "当前糖度sugar_brix" / "成熟糖度阈值mature_sugar_threshold"(假设糖度和成熟程度是线性关系)
-例如: 若西瓜正好成熟则当前糖度sugar_brix ==mature_sugar_threshold则当前成熟程度maturity_score为1.0.若继续生长当前糖度继续增加还可以突破1.0的成熟度变成1.1,1.2...1.x;
+- 每次网络连接成功后（WiFi边沿检测），自动触发补发状态机
+- 按文件顺序查找所有`up=0`记录，依次补发
+- 补发前随机延迟0~10秒，防止多设备同时上传造成服务器压力
+- 补发成功后立即标记`up=1`
+- 新数据上传优先级高于老数据（先发新，再补旧）
 
-3.2瓜田3个环境数据处理:
-(1)瓜田环境信息的收集->处理->入库
-a. 根据此瓜的设备编号(瓜田号-瓜组-瓜号)中的瓜田号,查询此瓜所在瓜田的生产信息表;
-b. 校验数据是否有效: 如果此瓜的瓜田号不存在于生产信息表,则废弃此数据,并且写入Error日志,如果存在此瓜田号则进入数据合法性校验环节:
-检测瓜田携带的环境信息是否有效
-校验规则一: 3项数据不能都为99
-校验规则二:数值范围校验（如温度：-40~80℃，湿度：0~100% RH，光照：0~65535Lux）。
-校验失败返回 HTTP 400 Bad Request，并记录日志，不要入库。
-所有规则都满足则允许数据入库;
-c. 将经过校验的数据写入瓜田环境数据表;
+### 2.10 蜂鸣器反馈模块（BuzzerManager，单例）
 
+- WiFi连接成功 → 响1秒
+- 糖度检测完成 → 响1秒
+- `loop()`必须在主循环中调用（非阻塞）
 
-4. 把数据给Web网页展示
-关于西瓜: 设备编号 + 成熟度 + 糖度值 + 光谱数据spectrum_json + 数据时间戳
-关于环境: 温度 + 湿度 + 光照强度 + 数据时间戳
+### 2.11 LVGL显示界面（UIManager）
 
-细节补充:
-5. "光谱计算->糖度"算法模型
-思路: (暂定)
-建立模型: 用已知糖度的西瓜和其光谱,建立糖度与光谱的关系模型
-使用模型推理: 使用光源照射,接收反射光源,分析反射光谱,计算糖度数据;
-实现流程:(暂定)
-...
+4个页面：启动页、模式选择页、测试模式页、工业模式页
 
-6.设备认证
-为了防止任何设备只要知道 IP:Port 都可以上传数据，恶意攻击者可以伪造大量假数据淹没数据库。
-需要:
-给每个设备烧录一个唯一的 Device Token（API Key）。
-设备上传数据时必须在 HTTP Header 中携带 Token。
-服务端校验 Token 是否在数据库中存在，且对应有效的瓜田 / 设备。
+**启动页**：淡绿色背景，设备编号，西瓜种类，时间同步状态（"正在等待时间更新..."）
 
-7.Web 后台：实现安全登录机制
-用基于Session+Argon2的轻量化方案。首先用Argon2对用户密码哈希后存储（Argon2id 内置随机盐，支持内存/时间成本调节，可有效防止暴力破解、GPU加速攻击和侧信道攻击，是目前业界推荐的密码哈希标准），避免明文风险。然后实现Session管理，用户登录验证通过后，生成唯一Session ID，关联用户信息并设置1小时过期时间，用unordered_map在内存中维护Session表。最后在HTTP响应中通过Cookie返回Session ID，后续请求验证Cookie中的Session ID是否有效即可。这个方案代码量少，不用复杂框架，适合毕业设计。
+**模式选择页**：时间同步成功后动态显示"测试模式"和"工业模式"按钮
 
-### 后端服务器新增功能
+**测试模式**：单次检测按钮、糖度/成熟度实时显示、历史记录表格（No/Brix/M%/Avg/AM%）、清除按钮
 
-#### 设备时间同步握手接口
-- 新增API接口：GET /api/device/time
-- 设备首次联网时调用此接口获取服务器当前时间戳
-- 返回格式：
+**工业模式**：双TileView设计
+
+- 第一页（实时数据）：设备编号、糖度大数字、成熟度百分比、温湿度光照四格数据、下次自动检测倒计时、立即检测按钮
+- 第二页（历史记录）：Time/Brix/Temp/Hum/Light列表格，Upload列Y/N标识
+
+---
+
+## 三、模块二：后端服务器（FieldDataProcessingServer）
+
+### 3.1 技术架构
+
+- **编程语言**：C++17
+- **HTTP库**：cpp-httplib
+- **JSON库**：nlohmann/json
+- **密码哈希**：libsodium（Argon2id）
+- **数据库**：MySQL（sws_db，utf8mb4）
+- **服务器配置**：config.ini
+
+### 3.2 认证与安全
+
+#### 3.2.1 设备认证（DeviceAuth）
+
+- 验证HTTP Header中的`device_id`+`token`
+- 查询`device_auth`表，校验token匹配且`status=1`（启用）
+- 认证失败返回HTTP 401 Unauthorized
+
+#### 3.2.2 管理员认证（AdminAuth + Session）
+
+- 密码存储：Argon2id哈希（防暴力破解、GPU加速攻击、侧信道攻击）
+- 登录成功后生成32字符UUID Session ID，1小时过期，存储在内存`unordered_map`中
+- HTTP响应通过`Set-Cookie: session_id=xxx`返回
+- 后续请求验证Cookie中的Session ID有效性
+
+### 3.3 数据接收与处理
+
+#### 3.3.1 设备数据上传接口 POST /api/device/upload
+
+**请求头**：`device_id`、`token`、`Content-Type: application/json`
+
+**请求体**：
+
 ```json
 {
-  "code": 200,
-  "server_time": 1712345678
+  "spectrum_json": {"ch415":123,"ch445":456,"ch480":789,"ch515":234,"ch555":567,"ch595":890,"ch640":321,"ch680":654,"chClear":999,"chNIR":111},
+  "temperature": 25.5,
+  "humidity": 60.2,
+  "light": 10000,
+  "collected_at": 1712345678
 }
 ```
 
-#### 数据接收时间戳修改
-- 后端不再自动生成数据采集时间戳
-- 改为优先从HTTP请求body的JSON结构体中读取时间戳
-- 如果JSON中没有时间戳字段，才使用服务器收到消息的时刻作为时间戳
-- 返回报文body中加入当前服务器时间戳，供设备校准时间
+**服务端处理流程**：
 
-#### 返回报文时间戳
-- 每次数据上传成功后，在响应body中加入：
+1. 设备Token认证
+2. 从设备编号解析出瓜田号（取前缀，如"1001-01-01"→"1001"）
+3. 校验瓜田号存在于`field_production`表
+4. 数据合法性校验：
+   - 环境三值不全为99
+   - 温度范围 -40~80℃、湿度 0~100%、光照 0~65535 Lux
+5. 获取数据采集时间戳：优先从JSON读取，备用服务器当前时间
+6. 若`field_environment`主键冲突（同一秒同一瓜田），时间戳+1秒重试
+7. MLR计算糖度 + 成熟度计算
+8. 同时写入`watermelon_data`和`field_environment`表
+9. 响应中携带`server_time`供设备校时
+
+**成功响应**：
+
 ```json
 {
   "code": 200,
@@ -246,37 +208,318 @@ c. 将经过校验的数据写入瓜田环境数据表;
 }
 ```
 
-模块3-Web前端网站:
-1.网站首页包含:
-1.1.产品介绍:智能西瓜无损糖度检测系统的背景,功能,开发者,技术支持与联系方式;
-1.2.后台进入通道:需要通过登录管理员账号才能进入后台
+### 3.4 数据计算模块
 
-2.网站后台包含:
-2.1.后台左侧:
-(1)以阵列形式实时显示此瓜田的所有西瓜的编号,成熟度和糖度;
-(2)点击某一个西瓜信息可以跳转显示此西瓜的时间和糖度的折线图;
-(3)折线图的时间轴可以滑动显示整个历史数据;
-2.2.后台右侧:
-排列显示此瓜田的环境温度,湿度,光照随时间的实时变化;
-时间轴支持滑动显示整个历史数据
+#### 3.4.1 糖度计算（SugarCalc）
 
-整个后台页面用瓜田编号分页,要显示"当前瓜田/瓜田总数量"
-没有检测到鼠标移动或点击操作时,瓜田页面会自动切换轮番显示各个瓜田的数据6s一次
-
-### Web前端新增功能
-
-#### 第二页显示优化
-- 显示该设备近期上传的糖度历史记录
-- 底部显示下次自动发送数据的倒计时
-- 格式: 00:01:01/00:05:00 (表示再过1分01秒就上传数据,数据上传时间间隔是5分钟)
-
-#### 历史数据表格显示
-- 删除第二页的糖度历史折线图
-- 历史数据统一用表格显示（光谱数据不显示，因为数据量太大）
-- 表格格式：
 ```
-|Time|Sugar(Brix)|Temp(C)|Hum(%)|Light(Lux)|是否已上传|
-|2026.4.13.3:07|5.4|25.4|67.3|12000|Y|
+Sugar = 0.0012 × ch415 + 0.0005 × ch445 + 0.0021 × ch480 + 5.2
 ```
 
+#### 3.4.2 成熟度计算（MaturityCalc）
 
+```
+maturity_score = sugar_brix / mature_sugar_threshold
+```
+
+- 从`field_production`表读取该瓜田的`mature_sugar_threshold`
+- 可超过1.0（如糖度13.0 / 阈值12.0 = 1.083）
+
+### 3.5 数据库设计
+
+#### admin_users（管理员信息表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| id | INT | PK, AUTO_INCREMENT | 主键 |
+| username | VARCHAR(64) | UNIQUE, NOT NULL | 账号 |
+| password_hash | VARCHAR(255) | NOT NULL | Argon2id哈希 |
+| role | TINYINT | DEFAULT 1 | 0=超级管理员，1=普通管理员 |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| updated_at | TIMESTAMP | AUTO UPDATE | 更新时间 |
+
+#### device_auth（设备认证表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| device_id | VARCHAR(32) | PK | 设备编号（瓜田号-瓜组-瓜号） |
+| token | VARCHAR(64) | UNIQUE, NOT NULL | 认证令牌 |
+| status | TINYINT | DEFAULT 1 | 0=禁用，1=启用 |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+
+#### watermelon_data（西瓜信息表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| device_id | VARCHAR(32) | NOT NULL | 设备编号 |
+| collected_at | INT | NOT NULL | 数据采集时间戳（秒） |
+| sugar_brix | DECIMAL(5,2) | NOT NULL | 糖度 |
+| maturity_score | DECIMAL(5,3) | NOT NULL | 成熟度评分 |
+| spectrum_json | JSON | NOT NULL | AS7341光谱数据 |
+
+**联合主键**：(device_id, collected_at)
+
+#### field_production（瓜田生产信息表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| field_id | VARCHAR(16) | PK | 瓜田号 |
+| watermelon_variety | VARCHAR(64) | NOT NULL | 品种 |
+| mature_sugar_threshold | DECIMAL(5,2) | NOT NULL | 成熟糖度阈值 |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| updated_at | TIMESTAMP | AUTO UPDATE | 更新时间 |
+
+#### field_environment（瓜田环境信息表）
+
+| 字段 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| field_id | VARCHAR(16) | NOT NULL | 瓜田号 |
+| collected_at | INT | NOT NULL | 时间戳（秒） |
+| temperature_c | DECIMAL(5,2) | NOT NULL | 温度（℃） |
+| humidity_rh | DECIMAL(5,2) | NOT NULL | 湿度（%RH） |
+| light_lux | INT | NOT NULL | 光照（Lux） |
+
+**联合主键**：(field_id, collected_at)
+
+### 3.6 API接口总表
+
+| 接口 | 方法 | 路径 | 认证 | 功能 |
+|---|---|---|---|---|
+| 心跳检测 | GET | `/ping` | 无 | 返回pong |
+| 设备时间同步 | GET | `/api/device/time` | 设备Token | 返回服务器Unix时间戳 |
+| 设备数据上传 | POST | `/api/device/upload` | 设备Token | 接收数据→校验→计算→入库→返回糖度/成熟度/server_time |
+| 管理员登录 | POST | `/api/admin/login` | 无 | Argon2验证→Set-Cookie |
+| 管理员登出 | POST | `/api/admin/logout` | Session | 销毁Session |
+| 瓜田列表 | GET | `/api/admin/field/list` | Session | 返回所有瓜田及品种 |
+| 西瓜实时数据 | GET | `/api/admin/watermelon/list` | Session | 返回瓜田下每个设备最新一条数据（含collected_at） |
+| 西瓜历史糖度 | GET | `/api/admin/watermelon/history` | Session | 返回单设备最近84天糖度数据 |
+| 瓜田环境数据 | GET | `/api/admin/field/environment` | Session | 返回瓜田最近84天温湿度光照数据 |
+| 静态文件托管 | GET | `/*` | 无/重定向 | HTML/CSS/JS/ECharts库 |
+
+### 3.7 关键业务规则
+
+| 规则 | 说明 |
+|---|---|
+| 环境数据无效 | 温度=99 AND 湿度=99 AND 光照=99 → 跳过field_environment写入，西瓜数据不受影响 |
+| 主键冲突解决 | 同一秒同一瓜田重复上传 → 时间戳+1秒后重试 |
+| 设备禁用 | device_auth.status=0 → HTTP 401 |
+| 瓜田号校验 | 上传时必须校验瓜田号存在field_production表 |
+| 时间戳优先级 | 优先采用请求体JSON中的collected_at，否则用服务器时间 |
+
+---
+
+## 四、模块三：前端（FieldMonitoringPlatform）
+
+### 4.1 技术架构
+
+- **视图层**：HTML5 + 原生CSS3（CSS Variables、Flexbox、Grid）
+- **逻辑层**：原生JavaScript（ES6+、Async/Await、Fetch API）
+- **可视化**：ECharts v5.5.0（离线部署，防断网）
+- **部署方式**：由后端C++服务器（cpp-httplib）挂载静态目录直接托管
+
+### 4.2 前台首页（index.html）
+
+- 产品介绍区域：系统背景、功能说明
+- 技术特性展示卡片：无损糖度检测、环境实时监控、智能监控大屏
+- 后台登录入口按钮（→ admin/login.html）
+- 底部：开发团队联系方式
+
+### 4.3 管理员登录模块（admin/login.html + api.js）
+
+- 账号密码表单提交
+- POST `/api/admin/login`
+- 登录成功：服务器在响应头写入`Set-Cookie: session_id=xxx`，跳转`dashboard.html`
+- 登录失败：显示错误提示
+
+### 4.4 监控大屏模块（admin/dashboard.html + chart.js + auto_switch.js）
+
+#### 4.4.1 页面布局
+
+- **顶部导航栏**：瓜田切换按钮（◀/▶）、当前瓜田信息（品种/总数量）、最后同步时间、强制刷新按钮、系统时间、注销按钮
+- **左侧面板（flex:4）**：西瓜状态阵列（CSS Grid）+ 糖度历史折线图
+- **右侧面板（flex:5）**：温度折线图 + 湿度折线图 + 光照折线图（纵向排列）
+
+#### 4.4.2 西瓜阵列卡片（renderWatermelonGrid）
+
+- 显示设备编号、糖度（Brix）、成熟度百分比标签
+- 成熟标签样式：糖度≥1.0→红色"成熟"；<1.0→黄色"生长"
+- **掉线感知**：计算`当前时间戳 - collected_at > 1800秒（30分钟）`→ 标记离线
+- 离线卡片样式：红色虚线边框 + 浅红背景（opacity:0.8）+ 底部闪烁"⚠️ 超时未更新"文字
+- 点击卡片：选中西瓜并刷新历史糖度图表
+
+#### 4.4.3 ECharts图表引擎（chart.js）
+
+**X轴严格控制**：强制使用`type: 'value'`（纯数值轴），传入精确毫秒时间戳作为`min/max/interval`，通过`formatter`还原为可读时间格式（时:分 或 月.日）。
+
+**Y轴色彩映射**：通过颜色数组给`splitLine.lineStyle.color`，实现温度[-10,0℃]和[40,60℃]为红色告警线、[10,30℃]为黑色正常线的工业级UI还原。
+
+**Tooltip自定义**：重写`tooltip.formatter`，将数值时间戳翻译为`YYYY年MM月DD日 HH:mm:ss`。
+
+**糖度阈值线**：注入黄色`markLine`作为成熟度阈值基准线。
+
+#### 4.4.4 时间刻度控制
+
+支持4档切换（5分钟/2小时/1天/1周），每个图表独立控制，通过`getTimeRange(scaleLevel)`计算X轴边界。
+
+### 4.5 双定时器机制（auto_switch.js）
+
+| 定时器 | 类型 | 周期 | 功能 |
+|---|---|---|---|
+| idleTimer | setTimeout | 60秒无操作触发 | 切换到下一个瓜田巡航 |
+| dataRefreshTimer | setInterval | 每6秒（永久运行） | 静默拉取最新数据重绘图表，不打断用户交互 |
+
+- 任何鼠标/键盘操作调用`resetIdleTimer()`重置无操作计时器
+- 强制刷新按钮触发`loadFieldData()`并重置idleTimer
+
+### 4.6 前端API请求
+
+| 接口 | 方法 | 路径 | 参数 | 返回数据 |
+|---|---|---|---|---|
+| 管理员登录 | POST | `/api/admin/login` | username, password | code+role+Set-Cookie |
+| 瓜田列表 | GET | `/api/admin/field/list` | — | [{field_id, watermelon_variety}] |
+| 西瓜实时数据 | GET | `/api/admin/watermelon/list` | field_id | 每个设备最新一条，含collected_at |
+| 西瓜历史糖度 | GET | `/api/admin/watermelon/history` | device_id | [[timestamp, sugar_brix], ...] |
+| 瓜田环境数据 | GET | `/api/admin/field/environment` | field_id | [[timestamp, temp, hum, light], ...] |
+
+### 4.7 掉线检测参数
+
+| 参数 | 值 | 说明 |
+|---|---|---|
+| OFFLINE_THRESHOLD | 30 * 60（1800秒） | 30分钟无数据判定为离线 |
+| 判断字段 | collected_at | 服务器返回的数据采集时间戳（Unix秒） |
+| 兜底逻辑 | 若collected_at为空 | 默认为在线，不触发警告 |
+
+---
+
+## 五、三端数据流总图
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     FieldAcquisitionTerminal (ESP32)                  │
+│                                                                      │
+│  AS7341光谱 ──┐                                                     │
+│  SHT31温湿 ──┼──→ SensorManager ──→ MLR糖度计算 ──→ 本地显示(LVGL) │
+│  BH1750光照 ──┘                                                     │
+│                                         │                           │
+│                          ┌──────────────┴──────────────┐            │
+│                     测试模式（不上传）              工业模式（每5分钟）   │
+│                          │                            │              │
+│                   LittleFS本地存储              HTTP POST上传         │
+│                   （最多20条内存）                  │               │
+└────────────────────────────────────┼──────────────────────────────┘
+                                     │
+                    HTTP POST /api/device/upload
+                    Header: device_id + token
+                    Body: spectrum_json, temperature, humidity,
+                          light, collected_at
+                                     │
+                                     ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│               FieldDataProcessingServer (C++ MySQL)                   │
+│                                                                       │
+│  ① DeviceAuth: token校验 ──────────────────────────────────────────┐  │
+│  ② DataCheck: 瓜田号存在性校验                                      │  │
+│  ③ DataCheck: 环境数据合法性（不全为99 + 范围校验）                 │  │
+│  ④ SugarCalc: MLR糖度计算                                         │  │
+│  ⑤ MaturityCalc: 成熟度 = 糖度 / 品种阈值                          │  │
+│  ⑥ MySQLDriver: 同时写入watermelon_data + field_environment        │  │
+│  ⑦ 响应: sugar_brix + maturity_score + server_time                │  │
+│                                                                      │  │
+│  存储表:                                                            │  │
+│   admin_users ──→ 管理员登录 (Argon2 + Session)                   │  │
+│   device_auth ──→ 设备Token认证                                    │  │
+│   watermelon_data ──→ device_id + collected_at + sugar_brix +     │  │
+│                       maturity_score + spectrum_json               │  │
+│   field_production ──→ field_id + 品种 + 成熟阈值                   │  │
+│   field_environment ──→ field_id + collected_at +                │  │
+│                         temperature_c + humidity_rh + light_lux    │  │
+│                                                                      │  │
+│  对外接口:                                                           │  │
+│   GET  /api/device/time       ── 设备校时                          │  │
+│   POST /api/device/upload      ── 设备数据上传                       │  │
+│   POST /api/admin/login        ── 管理员登录                         │  │
+│   GET  /api/admin/field/list  ── 瓜田列表                          │  │
+│   GET  /api/admin/watermelon/list     ── 西瓜实时数据              │  │
+│   GET  /api/admin/watermelon/history ── 单瓜历史糖度               │  │
+│   GET  /api/admin/field/environment  ── 瓜田环境历史              │  │
+│   GET  /* (静态文件)           ── 前端页面托管                       │  │
+└──────────────────────────────────────┼──────────────────────────────┘
+                                       │
+                       GET /api/admin/watermelon/list
+                       GET /api/admin/watermelon/history
+                       GET /api/admin/field/environment
+                       Cookie: session_id=xxx
+                                       │
+                                       ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│              FieldMonitoringPlatform (HTML/CSS/JS + ECharts)           │
+│                                                                       │
+│  index.html ── 产品介绍 + 登录入口                                    │
+│   │                                                                  │
+│   └── admin/login.html ── 管理员登录 → dashboard.html                 │
+│                                                                       │
+│  dashboard.html ── 监控大屏                                           │
+│   │                                                                  │
+│   ├── chart.js ── renderWatermelonGrid（离线感知，30分钟判定）        │
+│   │                 buildStrictOption（严格坐标轴配置）               │
+│   │                 renderWmHistoryChart / renderEnvHistoryCharts     │
+│   │                                                                  │
+│   └── auto_switch.js ── 双定时器：60s切换瓜田 + 每6s静默刷新图表      │
+│                         fetchFieldList / loadFieldData               │
+│                         getTimeRange（4档时间刻度）                   │
+│                         reloadAllChartsData（环境+糖度数据）           │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 六、核心算法汇总
+
+### 6.1 糖度MLR计算公式
+
+```
+Sugar (Brix) = 0.0012 × ch415 + 0.0005 × ch445 + 0.0021 × ch480 + 5.2
+```
+
+- ch415/ch445/ch480：AS7341的415nm/445nm/480nm通道光谱值
+- 结果限制在0.0~20.0 Brix范围
+- 系数由标定实验数据拟合，适用于宽谱白光LED照射条件
+
+### 6.2 成熟度计算公式
+
+```
+maturity_score = sugar_brix / mature_sugar_threshold
+```
+
+- `mature_sugar_threshold`：该瓜田品种的成熟糖度阈值（由生产者注册到`field_production`表）
+- 等于1.0表示刚好成熟，超过1.0表示过熟
+
+---
+
+## 七、数据库ER关系
+
+```
+┌─────────────────┐       1:N        ┌─────────────────┐
+│  device_auth    │◄────────────────│  watermelon_data │
+│  (设备Token表)    │  device_id      │  (西瓜信息表)     │
+└────────┬────────┘   前缀解析       └────────┬────────┘
+         │                                    │
+         │      1:N (field_id前缀)           │ maturity_score
+         │◄──────────────────────────────────┘
+         │    查询 mature_sugar_threshold
+         ▼
+┌─────────────────┐       1:N        ┌─────────────────┐
+│field_production │─────────────────►│field_environment │
+│ (瓜田生产信息表)   │  field_id       │ (瓜田环境信息表)  │
+└─────────────────┘                  └─────────────────┘
+```
+
+---
+
+## 八、访问凭证
+
+| 系统 | 用户名 | 密码 | 说明 |
+|---|---|---|---|
+| 云服务器SSH | root | Mhr289839. | 远程登录 |
+| MySQL | root / sws_user | Mhr289839. | 数据库管理 |
+| Web管理后台 | admin | admin123 | 默认超级管理员 |

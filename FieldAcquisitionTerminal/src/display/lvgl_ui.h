@@ -20,6 +20,7 @@ public:
     // 启动页相关
     void showBootScreen();
     void showModeSelection(); 
+    bool isIndustrialModeUnlocked();
     
     // 工业模式相关
     void buildIndustrialUI();

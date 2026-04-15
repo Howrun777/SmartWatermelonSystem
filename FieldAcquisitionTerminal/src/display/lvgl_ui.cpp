@@ -19,49 +19,97 @@ void UIManager::init(MeasureCallback measureCb, ModeSelectCallback modeCb, Clear
     showBootScreen();
 }
 
+
 // ==========================================
-// 1. 启动页 
+// 1. 启动页 (动态显示模式按钮)
 // ==========================================
 void UIManager::showBootScreen() {
-    lv_obj_clean(lv_scr_act()); // 彻底清空当前屏幕的所有控件，防内存泄漏！
+    // 1. 暴力清空当前屏幕上的所有控件
+    // 防止从其他页面切回来时，旧控件残留造成内存泄漏和显示混乱
+    lv_obj_clean(lv_scr_act()); 
+    
+    // 2. 设置整个屏幕的背景颜色为淡绿色
+    // COLOR_BG 是在文件顶部定义的宏：淡绿色 (0xccffcc)
     lv_obj_set_style_bg_color(lv_scr_act(), COLOR_BG, 0);
 
-    lv_obj_t * title = lv_label_create(lv_scr_act());
-    lv_obj_set_style_text_color(title, COLOR_TEXT, 0);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0);
-    lv_label_set_text(title, "Smart Watermelon System");
-    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 30);
+    // ✅ 新增：每次进入启动屏时，必须重置指针为 null，代表还没解锁
+    btn_mode_ind = nullptr;
 
-    lv_obj_t * info = lv_label_create(lv_scr_act());
-    lv_obj_set_style_text_color(info, COLOR_TEXT, 0);
+    // --- 3. 创建顶部标题 "Smart Watermelon System" ---
+    lv_obj_t * title = lv_label_create(lv_scr_act()); // 创建一个文本标签控件
+    lv_obj_set_style_text_color(title, COLOR_TEXT, 0); // 设置文字颜色为黑色 (COLOR_TEXT)
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_16, 0); // 设置字体为 16 号
+    lv_label_set_text(title, "Smart Watermelon System"); // 设置标题的具体文字内容
+    // 设置标签位置：顶部居中对齐
+    // 参数说明：X轴偏移 0，Y轴偏移 30 (距离屏幕顶部 30 像素)
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 20);
+
+    // --- 4. 创建设备信息区 (显示 ID 和 品种) ---
+    lv_obj_t * info = lv_label_create(lv_scr_act()); // 创建文本标签
+    // ✅ 修改1：颜色改成深蓝色 (经典商务蓝 #2980b9)
+    lv_obj_set_style_text_color(info, lv_color_hex(0x2980b9), 0); 
+    // ✅ 修改2：字体放大到 20 号 (超大醒目)
+    lv_obj_set_style_text_font(info, &lv_font_montserrat_16, 0);
+    // 使用 \n 换行符，一次性显示两行内容：
+    // 第一行显示设备 ID，第二行显示西瓜品种
     lv_label_set_text_fmt(info, "ID: %s\nVar: %s", DEVICE_ID, WATERMELON_VARIETY);
-    lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 80);
+    // 设置标签位置：顶部居中对齐
+    // 参数说明：X轴偏移 0，Y轴偏移 60
+    lv_obj_align(info, LV_ALIGN_TOP_MID, 0, 60);
 
+    // --- 5. 创建状态提示标签 (显示当前同步状态) ---
+    // ✅ 状态提示：默认处于等待时间同步状态
     boot_status_label = lv_label_create(lv_scr_act());
+    // 设置文字颜色为红色 (COLOR_DANGER)，醒目提示用户当前状态
     lv_obj_set_style_text_color(boot_status_label, COLOR_DANGER, 0);
-    lv_label_set_text(boot_status_label, "Waiting for Time Sync...");
-    lv_obj_align(boot_status_label, LV_ALIGN_CENTER, 0, 10);
+    // 设置默认文字：等待时间同步
+    lv_label_set_text(boot_status_label, "Syncing time...");
+    // 设置标签位置：屏幕正中心，稍微往上一点
+    // 参数说明：X轴偏移 0，Y轴偏移 -30 (在屏幕中心上方 30 像素)
+    lv_obj_align(boot_status_label, LV_ALIGN_CENTER, 0, -30);
 
+    // --- 6. 创建测试模式按钮 (用户可以直接点击进入) ---
+    // ✅ 测试模式按钮：开机立即可见！不需要等时间同步
+    btn_mode_test = lv_btn_create(lv_scr_act()); // 创建按钮控件
+    lv_obj_set_size(btn_mode_test, 180, 45); // 设置按钮大小：宽 180 像素，高 45 像素
+    // 设置按钮位置：屏幕中心对齐
+    // 参数说明：X轴偏移 0，Y轴偏移 20 (在状态标签下方 50 像素)
+    lv_obj_align(btn_mode_test, LV_ALIGN_CENTER, 0, 20);
+    // 设置按钮背景颜色为蓝色 (COLOR_BTN_TEST)
+    lv_obj_set_style_bg_color(btn_mode_test, COLOR_BTN_TEST, 0);
+    // 绑定按钮点击事件：用户点击后，会调用 btn_mode_test_cb 回调函数
+    // 最后一个参数 this 是把当前 UIManager 对象传给回调函数
+    lv_obj_add_event_cb(btn_mode_test, btn_mode_test_cb, LV_EVENT_CLICKED, this);
+    // 在按钮上创建文字标签
+    lv_obj_t * lbl_test = lv_label_create(btn_mode_test);
+    // 设置按钮上的文字：Consumer Test Mode
+    lv_label_set_text(lbl_test, "Consumer Test Mode");
+    // 让文字在按钮内部居中显示
+    lv_obj_center(lbl_test);
+
+    // --- 7. 创建底部设计者签名 ---
     lv_obj_t * author = lv_label_create(lv_scr_act());
+    // 设置文字颜色为黑色
     lv_obj_set_style_text_color(author, COLOR_TEXT, 0);
+    // 设置签名文字：Designed by: Howrun
     lv_label_set_text(author, "Designed by: Howrun");
+    // 设置标签位置：底部居中对齐
+    // 参数说明：X轴偏移 0，Y轴偏移 -20 (距离屏幕底部 20 像素)
     lv_obj_align(author, LV_ALIGN_BOTTOM_MID, 0, -20);
 }
 
+// 检查橙色按钮是否已经存在
+bool UIManager::isIndustrialModeUnlocked() {
+    return (btn_mode_ind != nullptr);
+}
+
+// ✅ 当时间真正同步成功后，调用此函数释放工业模式
 void UIManager::showModeSelection() {
+    // 改变提示语和颜色
     lv_label_set_text(boot_status_label, "Time Synced! Select Mode:");
     lv_obj_set_style_text_color(boot_status_label, COLOR_TEXT, 0);
-    lv_obj_align(boot_status_label, LV_ALIGN_CENTER, 0, -30);
 
-    btn_mode_test = lv_btn_create(lv_scr_act());
-    lv_obj_set_size(btn_mode_test, 180, 45);
-    lv_obj_align(btn_mode_test, LV_ALIGN_CENTER, 0, 20);
-    lv_obj_set_style_bg_color(btn_mode_test, COLOR_BTN_TEST, 0);
-    lv_obj_add_event_cb(btn_mode_test, btn_mode_test_cb, LV_EVENT_CLICKED, this);
-    lv_obj_t * lbl_test = lv_label_create(btn_mode_test);
-    lv_label_set_text(lbl_test, "Consumer Test Mode");
-    lv_obj_center(lbl_test);
-
+    // 动态创建并显示工业模式按钮
     btn_mode_ind = lv_btn_create(lv_scr_act());
     lv_obj_set_size(btn_mode_ind, 180, 45);
     lv_obj_align(btn_mode_ind, LV_ALIGN_CENTER, 0, 80);
@@ -189,90 +237,219 @@ void UIManager::clearTestTable() {
 }
 
 // ==========================================
-// 工业模式 UI (双页滑动，带上传表格)
+// 3. 工业模式 UI (双页滑动，带上传表格)
 // ==========================================
 void UIManager::buildIndustrialUI() {
+    // 1. 初始化模式标记
     current_mode = MODE_INDUSTRIAL;
-    lv_obj_clean(lv_scr_act()); // 清空屏幕，防泄漏
+    // 2. 暴力清空当前屏幕上的所有控件，防止内存泄漏和旧控件残留
+    lv_obj_clean(lv_scr_act()); 
+    // 3. 设置整个屏幕的背景颜色为浅灰色 (工业风底色)
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0xf4f7f6), 0);
-
+    // --- 创建滑动翻页容器 (Tileview) ---
+    // 这是一个可以左右滑动的容器，用来放"第一页(数据)"和"第二页(历史表格)"
     lv_obj_t * tv = lv_tileview_create(lv_scr_act());
+    // 设置 Tileview 的大小：宽240像素，高260像素 (占满屏幕大部分区域)
     lv_obj_set_size(tv, 240, 260); 
+    // 【关键】定位 Tileview：顶部居中对齐，X轴偏移0，Y轴偏移0
+    // 如果你想让整体内容上移，把最后一个 0 改成负数，例如 -30
     lv_obj_align(tv, LV_ALIGN_TOP_MID, 0, 0);
+    // 向 Tileview 中添加两个"页面"(Tile)
+    lv_obj_t * tile1 = lv_tileview_add_tile(tv, 0, 0, LV_DIR_RIGHT); // 第一页：可以向右滑到第二页
+    lv_obj_t * tile2 = lv_tileview_add_tile(tv, 1, 0, LV_DIR_LEFT);  // 第二页：可以向左滑回第一页
 
-    lv_obj_t * tile1 = lv_tileview_add_tile(tv, 0, 0, LV_DIR_RIGHT); 
-    lv_obj_t * tile2 = lv_tileview_add_tile(tv, 1, 0, LV_DIR_LEFT);  
-
-    // --- 工业第一页 (保持不变) ---
+    // ==========================================
+    // --- 工业第一页 (数据展示页) ---
+    // ==========================================
+    
+    // 设置第一页的布局方式：垂直流式布局 (Flex Column)
+    // 意思是：添加到这个页面里的控件，会自动从上往下依次排列
     lv_obj_set_flex_flow(tile1, LV_FLEX_FLOW_COLUMN);
+    
+    // 设置 Flex 对齐方式：
+    // 1. LV_FLEX_ALIGN_START: 主轴(垂直方向)从顶部开始排列
+    // 2. LV_FLEX_ALIGN_CENTER: 侧轴(水平方向)居中对齐
+    // 3. LV_FLEX_ALIGN_CENTER: 多行对齐方式(这里用不到)
+    lv_obj_set_flex_align(tile1, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    
+    // 设置第一页的内边距：所有方向都是5像素 (控件不会贴着边缘)
     lv_obj_set_style_pad_all(tile1, 5, 0);
 
-    label_status = lv_label_create(tile1); 
-    lv_label_set_text(label_status, "Initializing...");
-    lv_obj_set_style_text_color(label_status, COLOR_BTN_TEST, 0);
+    // --- 1. 顶部状态栏 (显示 "Initializing..." 或时间同步状态) ---
+    label_status = lv_label_create(tile1); // 创建一个文本标签
+    lv_label_set_text(label_status, "Initializing..."); // 设置默认文字
+    lv_obj_set_style_text_color(label_status, COLOR_BTN_TEST, 0); // 设置文字颜色为蓝色
 
-    lv_obj_t * panel = lv_obj_create(tile1);
-    lv_obj_set_width(panel, 220);
-    lv_obj_set_flex_flow(panel, LV_FLEX_FLOW_COLUMN);
+    // --- 2. 设备身份信息区 (ID, Token, Variety) ---
+    // 创建一个容器(面板)，用来包裹这三行信息，方便统一设置背景色和内边距
+    lv_obj_t * id_panel = lv_obj_create(tile1);
     
-    label_temp = lv_label_create(panel); lv_label_set_text(label_temp, "Temp: -- C");
-    label_hum = lv_label_create(panel); lv_label_set_text(label_hum, "Hum: -- %");
-    label_light = lv_label_create(panel); lv_label_set_text(label_light, "Light: -- Lux");
-    label_sugar = lv_label_create(panel); 
-    lv_obj_set_style_text_color(label_sugar, COLOR_DANGER, 0);
-    lv_label_set_text(label_sugar, "Sugar: -- Brix");
+    // 设置面板宽度为230像素 (占满页面宽度)
+    lv_obj_set_width(id_panel, 230);
 
-    label_spectrum = lv_label_create(tile1);
+    lv_obj_set_size(id_panel, 230, 80); 
+    
+    // 设置面板内边距：8像素 (文字不会贴着面板边框)
+    lv_obj_set_style_pad_all(id_panel, 8, 0);
+    
+    // 设置面板背景色：淡蓝色 (区分身份区和数据区)
+    lv_obj_set_style_bg_color(id_panel, lv_color_hex(0xeaf2f8), 0);
+    
+    // 设置面板边框宽度：0 (隐藏边框，只要背景色)
+    lv_obj_set_style_border_width(id_panel, 0, 0);
+    
+    // 在面板内部创建真正显示文字的标签
+    lv_obj_t * dev_label = lv_label_create(id_panel);
+    
+    // 设置字体：20号大字体 (醒目)
+    lv_obj_set_style_text_font(dev_label, &lv_font_montserrat_20, 0);
+    
+    // 设置文字颜色：深灰色 (专业、不刺眼)
+    lv_obj_set_style_text_color(dev_label, lv_color_hex(0x2c3e50), 0);
+    
+    // 设置文字内容：使用 \n 换行，一次性显示 ID、TK、Vr 三行
+    lv_label_set_text_fmt(dev_label, "ID: %s\nTK: %s\nVr: %s", DEVICE_ID, DEVICE_TOKEN, WATERMELON_VARIETY);
+    
+    // 将这个文字标签在面板中居中显示
+    lv_obj_center(dev_label);
+
+    // --- 3. 传感器综合数据区 (白色卡片) ---
+    // 再创建一个容器(白色卡片)，包裹所有传感器数据
+    lv_obj_t * data_panel = lv_obj_create(tile1);
+    
+    // 设置卡片宽度：230像素
+    lv_obj_set_width(data_panel, 230);
+    
+    // 设置卡片内部布局：垂直流式布局 (数据从上往下排)
+    lv_obj_set_flex_flow(data_panel, LV_FLEX_FLOW_COLUMN);
+    
+    // 设置卡片内边距：10像素
+    lv_obj_set_style_pad_all(data_panel, 10, 0);
+    
+    // 设置卡片背景色：纯白色
+    lv_obj_set_style_bg_color(data_panel, lv_color_hex(0xffffff), 0);
+    
+    // 设置卡片边框宽度：1像素 (显示边框)
+    lv_obj_set_style_border_width(data_panel, 1, 0);
+    
+    // 设置卡片边框颜色：浅灰色
+    lv_obj_set_style_border_color(data_panel, lv_color_hex(0xbdc3c7), 0);
+    
+    // --- 在白色卡片里创建各个数据行 ---
+    
+    // 温度行
+    label_temp = lv_label_create(data_panel); 
+    lv_obj_set_style_text_font(label_temp, &lv_font_montserrat_16, 0); // 16号字体
+    lv_label_set_text(label_temp, "Temp: -- C"); // 默认文字
+
+    // 湿度行
+    label_hum = lv_label_create(data_panel); 
+    lv_obj_set_style_text_font(label_hum, &lv_font_montserrat_16, 0); // 16号字体
+    lv_label_set_text(label_hum, "Hum: -- %"); // 默认文字
+
+    // 光照行
+    label_light = lv_label_create(data_panel); 
+    lv_obj_set_style_text_font(label_light, &lv_font_montserrat_16, 0); // 16号字体
+    lv_label_set_text(label_light, "Light: -- Lux"); // 默认文字
+
+    // 糖度行 (最醒目，红色)
+    label_sugar = lv_label_create(data_panel); 
+    lv_obj_set_style_text_color(label_sugar, COLOR_DANGER, 0); // 红色文字
+    lv_obj_set_style_text_font(label_sugar, &lv_font_montserrat_16, 0); // 16号字体
+    lv_label_set_text(label_sugar, "Sugar: -- Brix"); // 默认文字
+
+    // 光谱数据块 (多行显示，字号较小)
+    label_spectrum = lv_label_create(data_panel);
+    
+    // 设置长文本模式：自动换行 (如果光谱数据太长，会自动换到下一行)
     lv_label_set_long_mode(label_spectrum, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(label_spectrum, 220);
+    
+    // 设置标签宽度：200像素 (超过这个宽度就换行)
+    lv_obj_set_width(label_spectrum, 200);
+    
+    // 设置字体：12号小字体 (节省空间)
     lv_obj_set_style_text_font(label_spectrum, &lv_font_montserrat_12, 0);
+    
+    // 设置文字颜色：灰色 (不抢眼，作为辅助数据)
+    lv_obj_set_style_text_color(label_spectrum, lv_color_hex(0x7f8c8d), 0);
+    
+    // 设置默认文字
     lv_label_set_text(label_spectrum, "[Spectrum]\nWaiting...");
 
-    // --- 工业第二页 ---
+    // ==========================================
+    // --- 工业第二页 (历史数据表格页) ---
+    // ==========================================
+    
+    // 设置第二页布局：垂直流式布局
     lv_obj_set_flex_flow(tile2, LV_FLEX_FLOW_COLUMN);
+    
+    // 创建标题 "Upload History"
     lv_obj_t * tbl_title = lv_label_create(tile2);
     lv_label_set_text(tbl_title, "Upload History");
 
+    // 创建历史记录表格
     table_ind_history = lv_table_create(tile2);
+    
+    // 设置表格宽度：230像素
     lv_obj_set_width(table_ind_history, 230); 
+    
+    // 设置表格单元格字体：12号小字体 (挤下更多列)
     lv_obj_set_style_text_font(table_ind_history, &lv_font_montserrat_12, LV_PART_ITEMS);
     
+    // 设置表格列数：5列
     lv_table_set_col_cnt(table_ind_history, 5); 
-    lv_table_set_col_width(table_ind_history, 0, 60); // Time (压榨空间)
-    lv_table_set_col_width(table_ind_history, 1, 47); // Sgr 
-    lv_table_set_col_width(table_ind_history, 2, 43); // T
-    lv_table_set_col_width(table_ind_history, 3, 43); // H
-    lv_table_set_col_width(table_ind_history, 4, 45); // Up (最窄)
     
+    // 设置每一列的宽度 (像素)
+    lv_table_set_col_width(table_ind_history, 0, 70);  // 第1列：Time
+    lv_table_set_col_width(table_ind_history, 1, 46);  // 第2列：Sgr (糖度)
+    lv_table_set_col_width(table_ind_history, 2, 42);  // 第3列：T (温度)
+    lv_table_set_col_width(table_ind_history, 3, 42);  // 第4列：H (湿度)
+    lv_table_set_col_width(table_ind_history, 4, 45);  // 第5列：UP (上传状态)
+    
+    // 填充表头文字 (第0行)
     lv_table_set_cell_value(table_ind_history, 0, 0, "Time");
-    lv_table_set_cell_value(table_ind_history, 0, 1, "Su");
+    lv_table_set_cell_value(table_ind_history, 0, 1, "Sgr");
     lv_table_set_cell_value(table_ind_history, 0, 2, "T");
     lv_table_set_cell_value(table_ind_history, 0, 3, "H");
-    lv_table_set_cell_value(table_ind_history, 0, 4, "Up");
+    lv_table_set_cell_value(table_ind_history, 0, 4, "UP");
 
-    // --- 工业底部按钮 ---
-    lv_obj_t * btn_home = lv_btn_create(lv_scr_act()); // 绑定到主屏幕
-    lv_obj_set_size(btn_home, 60, 35);
+    // ==========================================
+    // --- 屏幕底部固定按钮区 (不在 Tileview 里，固定在屏幕最下方) ---
+    // ==========================================
+    
+    // 1. HOME 按钮 (左下角)
+    lv_obj_t * btn_home = lv_btn_create(lv_scr_act()); // 直接在屏幕上创建，不在 Tileview 里
+    lv_obj_set_size(btn_home, 60, 35); // 按钮大小
+    // 按钮位置：左下角对齐，X轴右移5px，Y轴上移15px
     lv_obj_align(btn_home, LV_ALIGN_BOTTOM_LEFT, 5, -15);
-    lv_obj_set_style_bg_color(btn_home, COLOR_GREY, 0);
-    lv_obj_add_event_cb(btn_home, btn_home_cb, LV_EVENT_CLICKED, this);
-    lv_obj_t * lbl_home = lv_label_create(btn_home);
-    lv_label_set_text(lbl_home, "HOME"); lv_obj_center(lbl_home);
+    lv_obj_set_style_bg_color(btn_home, COLOR_GREY, 0); // 灰色背景
+    lv_obj_add_event_cb(btn_home, btn_home_cb, LV_EVENT_CLICKED, this); // 绑定点击事件
+    lv_obj_t * lbl_home = lv_label_create(btn_home); // 按钮上的文字
+    lv_label_set_text(lbl_home, "HOME"); 
+    lv_obj_center(lbl_home); // 文字在按钮中居中
 
+    // 2. MEASURE 按钮 (底部中间)
     btn_measure = lv_btn_create(lv_scr_act());
-    lv_obj_align(btn_measure, LV_ALIGN_BOTTOM_MID, 15, -15); // 稍微往右挪一点避开Home
-    lv_obj_set_size(btn_measure, 120, 35);
-    lv_obj_set_style_bg_color(btn_measure, COLOR_BTN_IND, 0);
-    lv_obj_add_event_cb(btn_measure, btn_measure_cb, LV_EVENT_CLICKED, this);
-    lv_obj_t * btn_label = lv_label_create(btn_measure);
-    lv_label_set_text(btn_label, "MEASURE"); lv_obj_center(btn_label);
+    // 按钮位置：底部中间对齐，X轴右移15px，Y轴上移15px
+    lv_obj_align(btn_measure, LV_ALIGN_BOTTOM_MID, 15, -15); 
+    lv_obj_set_size(btn_measure, 120, 35); // 按钮大小
+    lv_obj_set_style_bg_color(btn_measure, COLOR_BTN_IND, 0); // 橙色背景
+    lv_obj_add_event_cb(btn_measure, btn_measure_cb, LV_EVENT_CLICKED, this); // 绑定点击事件
+    lv_obj_t * btn_label = lv_label_create(btn_measure); // 按钮上的文字
+    lv_label_set_text(btn_label, "MEASURE"); 
+    lv_obj_center(btn_label); // 文字居中
 
+    // 3. 倒计时标签 (右下角)
     label_countdown = lv_label_create(lv_scr_act());
-    lv_obj_align(label_countdown, LV_ALIGN_BOTTOM_RIGHT, -70, -48); // 放在右下角之上
-    lv_obj_set_style_text_font(label_countdown, &lv_font_montserrat_12, 0);
-    lv_label_set_text(label_countdown, "Auto:00:00");
+    // 标签位置：右下角对齐，X轴左移70px，Y轴上移50px
+    lv_obj_align(label_countdown, LV_ALIGN_BOTTOM_RIGHT, -70, -50); 
+    lv_obj_set_style_text_font(label_countdown, &lv_font_montserrat_12, 0); // 12号字体
+    lv_label_set_text(label_countdown, "Auto:00:00"); // 默认文字
 }
 
+// ==========================================
+// 更新函数 (确保字符串转换格式正确)
+// ==========================================
 void UIManager::updateEnv(float t, float h, int l) {
     if (current_mode != MODE_INDUSTRIAL) return;
     String tStr = String(t, 1); String hStr = String(h, 1);
@@ -289,7 +466,7 @@ void UIManager::updateSugar(float brix) {
 
 void UIManager::updateSpectrum(uint16_t c415, uint16_t c445, uint16_t c480, uint16_t c515, uint16_t c555, uint16_t c595, uint16_t c640, uint16_t c680, uint16_t clr, uint16_t nir) {
     if (current_mode != MODE_INDUSTRIAL) return;
-    lv_label_set_text_fmt(label_spectrum, "415:%d 445:%d 480:%d 515:%d\n555:%d 595:%d 640:%d 680:%d\nCLR:%d NIR:%d",
+    lv_label_set_text_fmt(label_spectrum, "415:%d  445:%d  480:%d  515:%d\n555:%d  595:%d  640:%d  680:%d\nCLR:%d  NIR:%d",
         c415, c445, c480, c515, c555, c595, c640, c680, clr, nir);
 }
 

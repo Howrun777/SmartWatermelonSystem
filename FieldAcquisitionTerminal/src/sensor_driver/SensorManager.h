@@ -10,7 +10,7 @@ public:
     void begin();
     void readEnvironment(float &temp, float &hum, int &light);
     bool readSpectrum(JsonObject& doc);
-    void controlLight(bool state);
+    //void controlLight(bool state);
 
 private:
     Adafruit_AS7341 as7341;

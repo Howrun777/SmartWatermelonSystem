@@ -9,6 +9,7 @@
 
 #include "sensor_driver/SensorManager.h"
 #include "sensor_driver/RTCManager.h"
+#include "sensor_driver/BuzzerManager.h" // ✅ 引入蜂鸣器库
 #include "storage/StorageManager.h"
 #include "network/HttpClient.h"
 #include "display/lvgl_ui.h"
@@ -77,22 +78,30 @@ void onModeSelected(SystemMode mode) {
     }
 }
 
-// ✅ 新增回调：返回主页 ====
+// ==== 回调：返回主页 ====
 void onReturnHomeClicked() {
     sysMode = MODE_WAITING;
-    test_count = 0;      // 清空测试数据
+    test_count = 0;      
     test_sugar_sum = 0;
     
-    // 因为此时肯定已经同步过时间了，我们重新绘制启动页后，立刻开放模式选择按钮
     ui.showBootScreen();
-    ui.showModeSelection();
+    lv_timer_handler(); // 强制刷出界面
+
+    // 检查是否已经拥有合法的时间戳 (大于2020年即可认为合法)
+    // 这样用户从测试模式退回主页时，不需要重新等待联网
+    if (RTCManager::getInstance().getTimestamp() > 1600000000) {
+        ui.showModeSelection(); // 时间合法，直接放出工业按钮
+    }
 }
 
 // ==== 回调：统一测量引擎 ====
 void onMeasureBtnClicked() {
     if (sysMode == MODE_WAITING) return;
 
-    sensorMgr.controlLight(true); delay(500); 
+    ui.updateStatus("Measuring..."); 
+    lv_timer_handler();
+
+    //sensorMgr.controlLight(true); delay(500); 
 
     float t, h; int l;
     sensorMgr.readEnvironment(t, h, l);
@@ -103,12 +112,15 @@ void onMeasureBtnClicked() {
     StaticJsonDocument<512> payload;
     JsonObject specObj = payload.createNestedObject("spectrum_json");
     bool specOk = sensorMgr.readSpectrum(specObj);
-    sensorMgr.controlLight(false);
+    //sensorMgr.controlLight(false);
 
     if (!specOk) { 
         if (sysMode == MODE_INDUSTRIAL) ui.updateStatus("ERR: Spectrum Failed!"); 
         return; 
     }
+
+    // ✅ 数据采集成功！无论是何种模式，只要拿到光谱就响 1 秒！
+    BuzzerManager::getInstance().beep(1000);
 
     float brix = SugarCalc::calculate(specObj);
 
@@ -164,11 +176,11 @@ void onMeasureBtnClicked() {
 }
 
 // ==== 系统初始化 ====
-// ==== 系统初始化 ====
 void setup() {
     Serial.begin(115200);
+    // ✅ 初始化蜂鸣器
+    BuzzerManager::getInstance().begin();
     sensorMgr.begin();
-    RTCManager::getInstance().begin();
     StorageManager::getInstance().begin();
     
     pinMode(TFT_BL, OUTPUT); digitalWrite(TFT_BL, HIGH); 
@@ -186,21 +198,52 @@ void setup() {
     indev_drv.type = LV_INDEV_TYPE_POINTER; indev_drv.read_cb = my_touch_read;
     lv_indev_drv_register(&indev_drv);
 
-    // ✅ 修改：多传一个 onReturnHomeClicked 回调给 UI
+    // 1. 加载启动页 (默认显示 Syncing time...)
     ui.init(onMeasureBtnClicked, onModeSelected, onClearTestClicked, onReturnHomeClicked);
     lv_timer_handler();
 
-    if (NetworkManager::connectWiFi()) {
-        ui.updateStatus("WIFI Connected! Syncing..."); lv_timer_handler();
-        uint32_t st = NetworkManager::fetchServerTime();
-        if (st > 0) RTCManager::getInstance().syncTime(st);
-    } else {
-        ui.updateStatus("WIFI Failed! Using RTC Time."); lv_timer_handler();
+    bool timeIsSynced = false;
+    bool hasWiFi = false;
+    bool hasServer = false;
+
+    // 2. 尝试从 DS3231 硬件获取绝对时间
+    RTCManager::getInstance().begin(); 
+    if (RTCManager::getInstance().getTimestamp() > 1600000000) {
+        timeIsSynced = true;
+        // ✅ 硬件 RTC 自带合法时间，一开机就同步成功，响 2 秒！
+        BuzzerManager::getInstance().beep(2000);
+    } 
+
+    // 3. 如果 RTC 没时间，尝试连 WiFi 兜底授时
+    if (!timeIsSynced) {
+        if (NetworkManager::connectWiFi()) {
+            hasWiFi = true; // 标记 WiFi 是通的
+            ui.updateStatus("WIFI OK! Syncing Server..."); 
+            lv_timer_handler();
+            
+            uint32_t st = NetworkManager::fetchServerTime();
+            if (st > 1600000000) {
+                hasServer = true; // 标记服务器是通的
+                RTCManager::getInstance().syncTime(st);
+                timeIsSynced = true;
+                // ✅ 从服务器拿到合法时间，同步成功，响 2 秒！
+                BuzzerManager::getInstance().beep(2000);
+            }
+        }
     }
     
-    delay(1000); 
-
-    ui.showModeSelection();
+    // 4. 严苛的审判时刻 (动态矩阵输出)
+    if (timeIsSynced) {
+        ui.showModeSelection();
+    } else {
+        // 根据状态决定输出的故障代码
+        if (!hasWiFi) {
+            ui.updateStatus("Sync Failed!\nRTC: X | WIFI: X | SVR: ?");
+        } else if (!hasServer) {
+            ui.updateStatus("Sync Failed!\nRTC: X | WIFI: OK | SVR: X");
+        }
+    }
+    
     lastAutoMeasure = millis();
 }
 
@@ -208,18 +251,63 @@ void loop() {
     unsigned long now = millis();
 
     // ==========================================
-    // 后台网络重连与防雪崩补发 (不论哪个模式都允许后台补发老数据)
+    // 1. 网络维护与热解锁状态机
     // ==========================================
+    // ✅ 每帧必须运行蜂鸣器引擎，才能实现非阻塞响铃！
+    BuzzerManager::getInstance().loop();
     NetworkManager::maintainWiFi(); 
     bool currentWiFiState = (WiFi.status() == WL_CONNECTED);
     
+    // 【场景 A：网络刚刚恢复 (断开 -> 连接)】
     if (currentWiFiState && !wasWiFiConnected) {
+        // 1. 激活延迟补发机制
         isRecoveringData = true;
         recoverStartTime = now;
-        recoverDelayDelay = random(0, 10000); // 测试期改成了 0~10 秒，正式演示可改回 200 秒
+        recoverDelayDelay = random(0, 10000); 
+
+        // 2. 【热解锁逻辑】
+        if (sysMode == MODE_WAITING && !ui.isIndustrialModeUnlocked()) {
+            ui.updateStatus("WIFI Restored! Syncing SVR...");
+            lv_timer_handler(); 
+
+            uint32_t st = NetworkManager::fetchServerTime();
+            if (st > 1600000000) {
+                RTCManager::getInstance().syncTime(st);
+                ui.showModeSelection(); 
+                // ✅ 热连网同步时间成功，响 2 秒！
+                BuzzerManager::getInstance().beep(2000);
+            } else {
+                // 热解锁时，WiFi 肯定连上了，但服务器没给时间
+                ui.updateStatus("Sync Failed!\nRTC: X | WIFI: OK | SVR: X");
+            }
+        }
     }
     wasWiFiConnected = currentWiFiState;
 
+    // ==========================================
+    // 2. 工业级防雪崩与抗云端宕机补发机制
+    // ==========================================
+    // 【场景 B：网络一直连着，周期性检查本地是否有因为服务器宕机遗留的数据】
+    if (currentWiFiState && !isRecoveringData) {
+        static unsigned long lastCheckTime = 0;
+        if (now - lastCheckTime > 15000) {
+            lastCheckTime = now;
+            
+            StaticJsonDocument<512> tempDoc;
+            JsonObject recordObj = tempDoc.to<JsonObject>();
+            uint32_t target_ts = 0;
+            
+            // 查到了未上传的老数据，激活补发！
+            if (StorageManager::getInstance().getUnuploadedRecord(recordObj, target_ts)) {
+                isRecoveringData = true;
+                recoverStartTime = now;
+                recoverDelayDelay = random(0, 10000); 
+                Serial.printf("[Cloud Check] Found unsent data! Recovery starts in %lu sec...\n", recoverDelayDelay / 1000);
+            }
+        }
+    }
+
+    // 【场景 C：执行补发 (时间到了就开始发)】
     if (isRecoveringData && currentWiFiState && (now - recoverStartTime > recoverDelayDelay)) {
         StaticJsonDocument<512> tempDoc;
         JsonObject recordObj = tempDoc.to<JsonObject>();
@@ -234,22 +322,26 @@ void loop() {
             payload["spectrum_json"] = recordObj["spec"];
 
             String serverMsg;
-            // 发送给服务器进行补发
+            Serial.printf("Recovering old data (TS: %u)...\n", target_ts);
+            
             if (NetworkManager::uploadData(payload, serverMsg)) {
-                // 1. 磁盘持久化更新：将这条数据的状态由 0 改为 1
+                // 补发成功：磁盘标记为已传，且 UI 表格 N 变 Y
                 StorageManager::getInstance().markAsUploaded(target_ts);
-                
-                // 2. ✅ UI 更新：把时间戳转为文本，告诉屏幕把这行数据的 'N' 刷成 'Y'
                 String timeStr = RTCManager::getInstance().formatTime(target_ts);
                 ui.markIndustrialHistoryUploaded(timeStr.c_str());
+            } else {
+                // 服务器还是宕机状态，暂停补发，等 15 秒后的周期检查再试
+                Serial.println("Server still down. Pause recovery.");
+                isRecoveringData = false; 
             }
         } else {
-            isRecoveringData = false; // 没有未上传的数据了，结束补发状态机
+            isRecoveringData = false; 
+            Serial.println("All old data recovered successfully!");
         }
     }
 
     // ==========================================
-    // 工业模式特有逻辑 (UI 刷新与定时上传)
+    // 3. 工业模式特有逻辑 (UI 刷新与定时上传)
     // ==========================================
     if (sysMode == MODE_INDUSTRIAL) {
         if (now - lastEnvUpdate > ENV_UPDATE_INTERVAL) {
@@ -257,8 +349,6 @@ void loop() {
             float t, h; int l;
             sensorMgr.readEnvironment(t, h, l);
             ui.updateEnv(t, h, l);
-            
-            // 工业模式第一页顶端显示实时时钟
             ui.updateStatus(RTCManager::getInstance().formatTime(RTCManager::getInstance().getTimestamp()).c_str());
         }
 

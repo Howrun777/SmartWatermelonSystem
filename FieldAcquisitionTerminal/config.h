@@ -22,8 +22,8 @@
 #define TOUCH_CS_PIN   33
 #define TOUCH_IRQ_PIN  36
 
-// ======= 宽谱 LED 控制引脚 =======
-#define LED_PIN 26 
+// ======= 蜂鸣器引脚 =======
+#define BUZZER_PIN 26 // ✅ 新增：高电平触发鸣叫
 
 // ======= 业务定时配置 =======
 #define ENV_UPDATE_INTERVAL 2000    // UI环境数据刷新频率: 2秒
