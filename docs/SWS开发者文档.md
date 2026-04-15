@@ -15,7 +15,7 @@
 | --- | ---------------------------------- | ------------------------------------ | ------------------------------- |
 | 感知层 | 瓜田环境采集终端 FieldAcquisitionTerminal  | 数据采集（光谱/温湿度/光照）、本地计算糖度、本地显示、HTTP上传数据 | ESP32、Arduino/ESP-IDF、I2C传感器    |
 | 服务层 | 瓜田数据处理中心 FieldDataProcessingServer | 设备认证、数据接收、校验、计算（糖度/成熟度）、MySQL存储、接口提供 | C++、HTTP协议、MySQL、Argon2、Session |
-| 应用层 | 瓜田监测可视化平台 FieldMonitoringPlatform  | 前台展示、管理员登录、数据可视化（图表/阵列）、自动轮询         | HTML/CSS/JS、ECharts、Cookie      |
+| 应用层 | 瓜田监测可视化平台 FieldMonitoringPlatform  | 前台展示、管理员登录、数据可视化（图表/阵列）、掉线感知（30分钟无数据标记红色）、双定时器机制（60s无操作切换瓜田+每6s静默刷新） | HTML/CSS/JS、ECharts、Cookie      |
 
 
 ---
@@ -26,80 +26,168 @@
 
 ```Plain Text
 
-SmartWatermelonSystem/  # 项目根目录
-├── FieldAcquisitionTerminal/  # 设备端（ESP32）
-│   ├── src/
-│   │   ├── main.cpp               # 主程序入口 (ESP32 + Arduino框架)
-│   │   ├── config.h              # 设备配置（编号、Token、WiFi、服务器IP、引脚定义）
-│   │   ├── sensor_driver/         # 传感器驱动（统一由SensorManager管理）
-│   │   │   ├── SensorManager.cpp/h # 传感器统一管理（初始化/读取/控制）
-│   │   │   ├── AS7341.cpp/h       # 多光谱传感器
-│   │   │   ├── SHT31.cpp/h       # 温湿度传感器（SHT31，高精度±0.2℃）【可选】
-│   │   │   ├── BH1750.cpp/h       # 光照传感器【可选】
-│   │   │   ├── LightControl.cpp/h  # 3W LED灯带控制（采集时开启，测完关闭）
-│   │   │   └── RTCManager.cpp/h   # DS3231 RTC时钟管理【可选】
-│   │   ├── display/              # TFT显示模块（LVGL图形库）
-│   │   │   └── lvgl_ui.cpp/h     # LVGL UI（双模式界面：测试+工业）
-│   │   ├── network/              # WiFi+HTTP上传
-│   │   │   └── HttpClient.cpp/h
-│   │   ├── storage/              # 本地存储（LittleFS）
-│   │   │   └── StorageManager.cpp/h
-│   │   └── algorithm/            # 本地糖度计算（MLR离线公式）
-│   │       └── sugar_calc.cpp/h
-│   ├── config.h                   # 设备配置（编号、Token、服务器IP）
-│   ├── platformio.ini             # PIO 工程配置与依赖库管理
-│   └── build/                     # 编译产物目录（.pio/build/）
+SmartWatermelonSystem/               # 项目根目录（git仓库）
+├── README.md                         # 项目说明（概述 + 部署指南）
 │
-├── FieldDataProcessingServer/  # 后端服务器（C++）
-│   ├── src/
-│   │   ├── main.cpp               # 服务启动入口
-│   │   ├── http_server/           # HTTP服务模块
-│   │   │   ├── HttpServer.cpp/h   # 封装httplib服务器,主要功能:启动,停止服务器
-│   │   │   └── Router.cpp/h       # 集中注册路由:请求->功能接口
-│   │   ├── auth/                  # 认证模块
-│   │   │   ├── DeviceAuth.cpp/h   # 设备Token认证
-│   │   │   └── AdminAuth.cpp/h    # 管理员登录/Session
-│   │   ├── data_process/          # 数据处理模块
-│   │   │   ├── SugarCalc.cpp/h    # 光谱→糖度计算（MLR多元线性回归）
-│   │   │   ├── MaturityCalc.cpp/h # 成熟度计算
-│   │   │   └── DataCheck.cpp/h    # 数据合法性校验
-│   │   ├── db/                    # 数据库模块
-│   │   │   ├── MySQLDriver.cpp/h  # MySQL连接/CRUD
-│   │   │   └── ConnectionPool.cpp/h  # 数据库连接池
-│   │   ├── session/               # Session管理
-│   │   │   └── Session.cpp/h
-│   │   └── utils/                 # 工具类
-│   │       ├── PasswordHasher.cpp/h  # 密码哈希（Argon2，libsodium
-│   │       └── Logger.cpp/h       # 日志
-│   ├── third_party/               # 第三方开源库(httplib, json, libsodium等)
-│   ├── sql/                       # 数据库建表与初始化语句
-│   │   └── init_db.sql    
-│   ├── config.ini                 # 服务器配置（IP/端口/数据库信息）
-│   ├── CMakeLists.txt             # C++编译配置
-│   └── build/                     # 编译产物目录（cmake-build-debug/ 或 cmake-build-release/）
+├── docs/                            # 毕业设计文档
+│   ├── SWS开发者文档.md              # 本文档（系统全貌 + 各模块说明）
+│   ├── SWS需求文档.md               # 需求规格说明
+│   ├── 论文框架.md                  # 论文大纲
+│   ├── 前端开发者文档.md             # 前端开发指南
+│   ├── 设备端开发者文档.md           # ESP32设备端开发指南
+│   └── 毕业论文初稿.md              # 论文正文草稿
 │
-├── FieldMonitoringPlatform/  # 前端Web
-│   ├── index.html               # 前台首页（产品介绍+登录入口）
+├── FieldAcquisitionTerminal/        # 硬件边缘设备（ESP32，PlatformIO）
+│   ├── platformio.ini               # PlatformIO工程配置（开发板、库依赖、构建标志）
+│   ├── config.h                    # 全局宏定义（WiFi、服务器地址、I2C/SPI引脚、蜂鸣器）
+│   ├── .gitignore                   # Git忽略（构建产物、.pio、.vscode）
+│   │
+│   ├── .vscode/                    # VSCode调试配置
+│   │   ├── c_cpp_properties.json   # C++ IntelliSense路径（PlatformIO自动生成）
+│   │   ├── launch.json             # PlatformIO调试器启动配置（3种变体）
+│   │   └── extensions.json         # 推荐的VSCode扩展
+│   │
+│   ├── .pio/                       # PlatformIO构建/缓存目录（已被.gitignore，约2000+文件）
+│   │   ├── build/esp32dev/
+│   │   │   ├── firmware.map
+│   │   │   └── firmware.elf        # （编译产物）
+│   │   └── libdeps/esp32dev/      # 下载的第三方库依赖
+│   │       ├── lvgl/
+│   │       ├── TFT_eSPI/
+│   │       ├── Adafruit AS7341/
+│   │       ├── Adafruit SHT31 Library/
+│   │       ├── BH1750/
+│   │       ├── RTClib/
+│   │       ├── ArduinoJson/
+│   │       └── XPT2046_Touchscreen/
+│   │
+│   └── src/                        # 应用程序源代码
+│       ├── main.cpp                # 入口点，状态机，UI回调，loop主循环
+│       │
+│       ├── algorithm/               # 离线算法
+│       │   └── sugar_calc.h        # MLR糖度/Brix计算（从光谱数据）
+│       │
+│       ├── display/                # LVGL UI层
+│       │   ├── lvgl_ui.h           # UIManager类声明（模式、回调、控件成员）
+│       │   └── lvgl_ui.cpp        # UI构建：启动画面、模式选择、检测模式
+│       │                             （本地模式）、工业模式（tileview：数据+历史）、
+│       │                             光谱/环境/糖度/状态更新
+│       │
+│       ├── network/                 # WiFi和HTTP网络
+│       │   ├── HttpClient.h        # NetworkManager类声明
+│       │   └── HttpClient.cpp      # connectWiFi、maintainWiFi、fetchServerTime、uploadData
+│       │
+│       ├── sensor_driver/           # 硬件外设驱动
+│       │   ├── SensorManager.h     # SensorManager：AS7341、SHT31、BH1750封装
+│       │   ├── SensorManager.cpp   # readEnvironment、readSpectrum、灵活降级（99.0）
+│       │   ├── RTCManager.h        # RTCManager单例：DS3231 + 系统时钟
+│       │   ├── RTCManager.cpp      # begin、getTimestamp、syncTime（北京时间+8h）、formatTime
+│       │   ├── BuzzerManager.h     # BuzzerManager单例（非阻塞异步蜂鸣）
+│       │   └── BuzzerManager.cpp   # beep()、loop() -- 高层触发接口
+│       │
+│       └── storage/                # 本地文件系统持久化
+│           ├── StorageManager.h     # StorageManager单例：LittleFS记录I/O
+│           └── StorageManager.cpp   # begin、saveRecord、checkAndCleanCapacity、
+│                                     getUnuploadedRecord、markAsUploaded（JSON Lines格式）
+│
+├── FieldDataProcessingServer/       # C++后端服务器（CMake构建）
+│   ├── CMakeLists.txt             # CMake配置：C++17、Threads、MySQL、libsodium
+│   │
+│   ├── sql/                       # 数据库Schema
+│   │   └── init_db.sql           # 5张表：admin_users、device_auth、field_production、
+│   │                               watermelon_data、field_environment + 种子数据
+│   │
+│   ├── third_party/               # 第三方单头文件库
+│   │   ├── httplib/
+│   │   │   ├── httplib.h         # cpp-httplib v0.x HTTP服务器（单头文件）
+│   │   │   └── httplib开发者文档.md  # cpp-httplib使用文档
+│   │   └── json/
+│   │       └── json.hpp          # nlohmann/json单头文件库
+│   │
+│   ├── build/                     # CMake构建目录（已被.gitignore）
+│   │   ├── CMakeCache.txt
+│   │   ├── Makefile
+│   │   ├── cmake_install.cmake
+│   │   └── CMakeFiles/            # 编译中间产物（.o/.d文件等）
+│   │
+│   └── src/                       # 应用程序源代码
+│       ├── main.cpp              # 入口：libsodium初始化、数据库连接、0.0.0.0:8080启动
+│       │
+│       ├── http_server/          # HTTP层
+│       │   ├── HttpServer.h      # HttpServer类：start/stop（封装httplib::Server）
+│       │   ├── HttpServer.cpp    # 构造函数注册路由，设置/mount静态目录/admin/*
+│       │   ├── Router.h          # Router静态声明
+│       │   └── Router.cpp        # 所有路由注册：/ping、/api/device/*、
+│       │                           /api/admin/*、/admin/*.html、CORS OPTIONS处理
+│       │
+│       ├── auth/                  # 认证
+│       │   ├── AdminAuth.h       # AdminAuth::login声明（Argon2 + session）
+│       │   ├── AdminAuth.cpp    # 查询admin_users，验证Argon2哈希，颁发session
+│       │   ├── DeviceAuth.h     # DeviceAuth::authenticate声明
+│       │   └── DeviceAuth.cpp   # 查询device_auth表，检查status=1
+│       │
+│       ├── session/              # 内存会话管理
+│       │   ├── Session.h         # Session单例：createSession、isValid、destroySession
+│       │   └── Session.cpp      # UUID会话（32位十六进制），1小时TTL
+│       │
+│       ├── db/                    # 数据库
+│       │   ├── MySQLDriver.h     # MySQLDriver单例：connect、execute、query、escapeString
+│       │   ├── MySQLDriver.cpp  # mysql_real_connect/query/escape_string，
+│       │   │                       线程安全互斥锁，结果集为vector<map<string,string>>
+│       │   ├── ConnectionPool.h  # （CMakeLists中声明，文件为空/未实现）
+│       │   └── ConnectionPool.cpp
+│       │
+│       ├── data_process/          # 业务逻辑/算法
+│       │   ├── SugarCalc.h       # SugarCalc::calculate（MLR光谱计算糖度）
+│       │   ├── SugarCalc.cpp     # 公式：brix=0.0012*ch415+0.0005*ch445+0.0021*ch480+5.2
+│       │   ├── MaturityCalc.h     # MaturityCalc::calculate（brix/瓜田阈值）
+│       │   ├── MaturityCalc.cpp  # 查询field_production阈值，返回成熟度比例
+│       │   ├── DataCheck.h       # DataCheck::isEnvironmentValid、isFieldExist
+│       │   └── DataCheck.cpp    # 校验环境数据（非全99.0）、检查瓜田是否注册
+│       │
+│       └── utils/                 # 工具类
+│           ├── PasswordHasher.h  # PasswordHasher::hash、verify（libsodium Argon2id）
+│           ├── PasswordHasher.cpp
+│           ├── Logger.h          # （CMakeLists中声明，文件为空/未实现）
+│           └── Logger.cpp
+│
+├── FieldMonitoringPlatform/        # Web前端（原生HTML/CSS/JS）
+│   ├── index.html                # 前台首页（产品介绍+系统架构展示）
+│   │
 │   ├── admin/
-│   │   ├── login.html           # 管理员登录页
-│   │   ├── dashboard.html       # 后台监控主页
-│   │   ├── js/
-│   │   │   ├── api.js           # 前端接口请求
-│   │   │   ├── chart.js         # ECharts图表渲染
-│   │   │   └── auto_switch.js   # 瓜田自动轮询（6s切换）
-│   │   └── css/
-│   │       └── style.css        # 页面样式
-│   └── assets/                  # 静态资源（图片/图标）
-│       ├── libs/                # 第三方JS库(echarts.min.js等)，防断网
-│       ├── images/             
-│       └── icons/
+│   │   ├── login.html            # 登录页（用户名/密码、显示/隐藏密码、错误提示）
+│   │   ├── dashboard.html        # 监控大屏主页面（西瓜阵列 + 4个ECharts图表）
+│   │   │
+│   │   ├── css/
+│   │   │   └── style.css        # 样式表：毛玻璃导航、卡片、西瓜阵列、离线告警动画
+│   │   │
+│   │   └── js/
+│   │       ├── api.js           # BASE_URL，login()封装（POST /api/admin/login）
+│   │       ├── chart.js         # ECharts初始化、buildStrictOption、renderWmHistoryChart、
+│   │       │                       renderEnvHistoryCharts（value轴时间尺度切换）
+│   │       └── auto_switch.js   # 瓜田自动切换（60s空闲）、数据刷新（6s间隔）、
+│   │                               changeScale、reloadAllChartsData、idleTimer管理
+│   │
+│   └── assets/
+│       └── libs/
+│           └── echarts.min.js   # ECharts v5.5（离线打包，防断网）
 │
-├── docs/  # 毕业设计文档
-│   ├── SWS开发者文档_v1.0.md
-│   ├── SWS需求文档_v1.0.md
-│   └── 部署手册.md
-└── README.md  # 项目说明
+└── .git/                          # Git仓库元数据
+    ├── HEAD
+    ├── config
+    ├── description
+    ├── COMMIT_EDITMSG
+    ├── info/exclude
+    ├── hooks/                     # Git钩子（模板示例）
+    ├── objects/                   # Git对象存储（40+打包对象）
+    ├── logs/
+    │   ├── refs/heads/master
+    │   └── HEAD
+    └── refs/heads/master
+
 ```
+
+
 
 ---
 
@@ -126,15 +214,16 @@ SmartWatermelonSystem/  # 项目根目录
 │  ├─ 工业模式页面（生产采集模式）
 │  └─ 历史数据表格显示
 ├─ 光源控制模块
-│  └─ 3W宽谱LED灯带（采集时开启，测完关闭，排除外界环境光干扰）
+│  └─ 3W宽谱LED灯带（GPIO26驱动三极管开关，采集时开启，测完后关闭，排除外界环境光干扰）
+│  注：GPIO控制逻辑嵌入主测量流程，无独立驱动文件
 ├─ 网络通信模块
 │  ├─ WiFi连接与重连机制（断线重连，每30秒）
 │  ├─ HTTP数据上传（设备编号+光谱+温湿度+光照）
 │  └─ 时间同步握手（首次联网获取服务器时间）
-├─ 蜂鸣器反馈模块【预留】
+├─ 蜂鸣器反馈模块
 │  ├─ WiFi连接成功提示（1秒蜂鸣）
 │  └─ 光谱检测完成提示（1秒蜂鸣）
-│  注：硬件支持 BUZZER=GPIO27，代码层尚未集成，可在后续版本完善
+│  注：通过 BuzzerManager 单例管理，GPIO26输出，非阻塞beep实现
 ├─ 时间管理模块
 │  ├─ DS3231 RTC时钟读取与写入【可选】
 │  ├─ 设备内部时间维护
@@ -146,7 +235,7 @@ SmartWatermelonSystem/  # 项目根目录
 ├─ 离线数据管理模块
 │  ├─ 离线数据标记与存储
 │  ├─ 网络恢复检测
-│  └─ 历史数据补发（随机延迟0~200秒）
+│  └─ 历史数据补发（随机延迟0~10秒，防止多设备同时上传造成雪崩）
 └─ 双模式系统
    ├─ 测试模式（消费者模式）
    │  ├─ 单次糖度检测
@@ -205,8 +294,6 @@ SmartWatermelonSystem/  # 项目根目录
 │  ├─ 西瓜数据查询接口
 │  ├─ 环境数据查询接口
 │  └─ 历史数据查询接口
-└─ 日志模块
-   └─ 错误日志、操作日志、数据日志
 ```
 
 ### 模块3：瓜田监测可视化平台（FieldMonitoringPlatform）
@@ -222,10 +309,11 @@ SmartWatermelonSystem/  # 项目根目录
 │  └─ Cookie会话管理
 ├─ 后台监控模块
 │  ├─ 左侧：西瓜数据阵列（编号/成熟度/糖度）
-│  ├─ 左侧：单西瓜历史数据表格（替代折线图）
-│  ├─ 右侧：瓜田环境折线图（温度/湿度/光照）
+│  ├─ 左侧：单西瓜糖度历史折线图（ECharts）
+│  ├─ 右侧：瓜田环境折线图（温度/湿度/光照，ECharts）
 │  ├─ 瓜田分页（当前瓜田/总数量）
-│  └─ 自动轮询（6s切换瓜田）
+│  ├─ 60秒无操作自动切换瓜田巡航
+│  └─ 每6秒静默刷新图表数据
 ├─ 历史数据展示模块
 │  ├─ 表格格式显示历史记录
 │  ├─ 字段：Time/Sugar/Temp/Hum/Light/上传状态
@@ -751,7 +839,7 @@ max_connections = 10
 
 1. 管理员登录 → 验证密码 → 获取Session
 2. 进入后台 → 请求瓜田列表 → 渲染分页
-3. 自动轮询（6s）→ 请求当前瓜田数据
+3. 静默刷新（每6秒）→ 请求当前瓜田数据
 4. 左侧渲染西瓜阵列，右侧渲染环境图表
 5. 点击西瓜 → 请求历史数据 → 渲染折线图
 
