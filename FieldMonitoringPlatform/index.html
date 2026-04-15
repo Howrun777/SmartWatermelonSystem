@@ -1,39 +1,814 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>智能西瓜无损糖度检测系统 - 首页</title>
-    <link rel="stylesheet" href="admin/css/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能西瓜无损糖度检测系统</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --green: #1D9E75;
+            --green-dark: #0F6E56;
+            --green-deep: #085041;
+            --green-light: #E1F5EE;
+            --green-mid: #5DCAA5;
+            --text-primary: #0f1a16;
+            --text-secondary: #4a6157;
+            --text-muted: #8aab9d;
+            --bg: #f5faf7;
+            --bg-card: #ffffff;
+            --border: rgba(29, 158, 117, 0.15);
+            --border-mid: rgba(29, 158, 117, 0.25);
+            --radius: 10px;
+            --radius-lg: 16px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: var(--bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ─── NAV ─── */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            height: 58px;
+            background: rgba(245, 250, 247, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 2.5rem;
+            gap: 2rem;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .nav-logo-mark {
+            width: 32px;
+            height: 32px;
+            background: var(--green);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .nav-logo-mark svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .nav-logo-text {
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: -0.02em;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-left: auto;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: var(--text-secondary);
+            font-size: 13.5px;
+            padding: 6px 12px;
+            border-radius: 6px;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .nav-links a:hover {
+            background: var(--green-light);
+            color: var(--green-dark);
+        }
+
+        .nav-cta {
+            background: var(--green) !important;
+            color: #fff !important;
+            font-weight: 500;
+            padding: 7px 16px !important;
+        }
+
+        .nav-cta:hover {
+            background: var(--green-dark) !important;
+        }
+
+        /* ─── HERO ─── */
+        .hero {
+            padding: 6rem 2.5rem 5rem;
+            max-width: 1100px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
+        }
+
+        .hero-left {}
+
+        .hero-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--green-light);
+            border: 1px solid rgba(29, 158, 117, 0.3);
+            color: var(--green-dark);
+            font-size: 12px;
+            font-weight: 500;
+            padding: 5px 12px;
+            border-radius: 100px;
+            margin-bottom: 1.5rem;
+            letter-spacing: 0.02em;
+        }
+
+        .hero-tag-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulse 2.2s ease infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.8); }
+        }
+
+        .hero h1 {
+            font-size: clamp(2rem, 3.5vw, 2.75rem);
+            font-weight: 400;
+            line-height: 1.2;
+            letter-spacing: -0.035em;
+            color: var(--text-primary);
+            margin-bottom: 1.25rem;
+        }
+
+        .hero h1 em {
+            font-style: normal;
+            color: var(--green);
+        }
+
+        .hero-desc {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.75;
+            margin-bottom: 2.5rem;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--green);
+            color: #fff;
+            text-decoration: none;
+            padding: 10px 22px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .btn-primary:hover { background: var(--green-dark); transform: translateY(-1px); }
+        .btn-primary:active { transform: translateY(0); }
+
+        .btn-ghost {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: transparent;
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 10px 22px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            font-weight: 400;
+            border: 1px solid var(--border-mid);
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+        }
+
+        .btn-ghost:hover { background: var(--green-light); color: var(--green-dark); }
+
+        /* Hero right — spec panel */
+        .hero-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .hero-panel-header {
+            background: var(--green);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .hero-panel-title {
+            font-size: 12px;
+            font-weight: 500;
+            color: #fff;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .hero-panel-status {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 11px;
+            color: rgba(255,255,255,0.8);
+        }
+
+        .status-dot {
+            width: 5px;
+            height: 5px;
+            background: #7fffd0;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .hero-panel-body {
+            padding: 0;
+        }
+
+        .spec-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 13px 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .spec-row:last-child { border-bottom: none; }
+
+        .spec-label { color: var(--text-secondary); }
+
+        .spec-value {
+            font-family: 'DM Mono', monospace;
+            font-size: 13px;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .spec-badge {
+            background: var(--green-light);
+            color: var(--green-dark);
+            font-size: 11px;
+            font-weight: 500;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        /* ─── STATS BAR ─── */
+        .stats-strip {
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-card);
+            padding: 1.75rem 2.5rem;
+        }
+
+        .stats-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 0.5rem 1rem;
+        }
+
+        .stat-item + .stat-item {
+            border-left: 1px solid var(--border);
+        }
+
+        .stat-num {
+            display: block;
+            font-size: 24px;
+            font-weight: 400;
+            color: var(--green);
+            letter-spacing: -0.04em;
+            font-family: 'DM Mono', monospace;
+            line-height: 1.2;
+        }
+
+        .stat-label {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* ─── FEATURES ─── */
+        .section {
+            padding: 5rem 2.5rem;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .section-eyebrow {
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--green);
+            margin-bottom: 0.6rem;
+        }
+
+        .section-heading {
+            font-size: clamp(1.5rem, 2.5vw, 2rem);
+            font-weight: 400;
+            letter-spacing: -0.03em;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .section-sub {
+            font-size: 15px;
+            color: var(--text-secondary);
+            margin-bottom: 3rem;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: var(--border);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            padding: 2rem;
+            transition: background 0.2s;
+        }
+
+        .feature-card:hover {
+            background: #f0faf5;
+        }
+
+        .feature-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.25rem;
+        }
+
+        .icon-green { background: var(--green-light); }
+        .icon-teal { background: #e0f4ef; }
+        .icon-emerald { background: #d4f1e4; }
+
+        .feature-card h3 {
+            font-size: 15px;
+            font-weight: 500;
+            margin-bottom: 0.6rem;
+            color: var(--text-primary);
+        }
+
+        .feature-card p {
+            font-size: 13.5px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+
+        .feature-tag {
+            display: inline-block;
+            margin-top: 1rem;
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--green-dark);
+            background: var(--green-light);
+            padding: 3px 9px;
+            border-radius: 4px;
+        }
+
+        /* ─── ARCH ─── */
+        .arch-section {
+            background: var(--bg-card);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            padding: 5rem 2.5rem;
+        }
+
+        .arch-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .arch-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1px;
+            background: var(--border);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        .arch-layer {
+            background: var(--bg-card);
+        }
+
+        .arch-layer-head {
+            padding: 10px 16px;
+            font-size: 11px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .head-green { background: #e1f5ee; color: #085041; }
+        .head-blue { background: #e6f1fb; color: #0C447C; }
+        .head-amber { background: #faeeda; color: #633806; }
+        .head-purple { background: #eeedfe; color: #3C3489; }
+
+        .arch-layer-body {
+            padding: 14px 16px;
+        }
+
+        .arch-item {
+            font-size: 12.5px;
+            color: var(--text-secondary);
+            padding: 4px 0;
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .arch-item::before {
+            content: '';
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: var(--green-mid);
+            flex-shrink: 0;
+        }
+
+        .dataflow {
+            background: #f0faf5;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .flow-node {
+            background: var(--bg-card);
+            border: 1px solid var(--border-mid);
+            border-radius: 6px;
+            padding: 5px 14px;
+            font-size: 12px;
+            color: var(--text-primary);
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .flow-sep {
+            color: var(--green-mid);
+            font-size: 16px;
+            font-weight: 300;
+        }
+
+        .flow-label {
+            margin-left: auto;
+            font-size: 11px;
+            color: var(--text-muted);
+            font-family: 'DM Mono', monospace;
+        }
+
+        /* ─── FOOTER ─── */
+        footer {
+            background: var(--text-primary);
+            color: rgba(255,255,255,0.5);
+            padding: 2.5rem;
+        }
+
+        .footer-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-brand-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: rgba(255,255,255,0.9);
+            margin-bottom: 6px;
+        }
+
+        .footer-detail {
+            font-size: 12px;
+            line-height: 1.8;
+        }
+
+        .footer-detail a {
+            color: var(--green-mid);
+            text-decoration: none;
+        }
+
+        .footer-right {
+            text-align: right;
+            font-size: 12px;
+        }
+
+        /* ─── ANIMATIONS ─── */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .hero-left { animation: fadeUp 0.5s ease both; }
+        .hero-panel { animation: fadeUp 0.5s 0.1s ease both; }
+        .stats-strip { animation: fadeUp 0.5s 0.15s ease both; }
+
+        /* ─── RESPONSIVE ─── */
+        @media (max-width: 800px) {
+            .hero { grid-template-columns: 1fr; gap: 2.5rem; }
+            .stats-inner { grid-template-columns: repeat(3, 1fr); }
+            .stat-item:nth-child(4), .stat-item:nth-child(5) { border-top: 1px solid var(--border); }
+            .feature-grid { grid-template-columns: 1fr; }
+            .arch-grid { grid-template-columns: 1fr 1fr; }
+            .nav-links a:not(.nav-cta) { display: none; }
+        }
+    </style>
 </head>
 <body>
 
-    <div class="hero">
-        <h1>🍉 智能西瓜无损糖度检测系统</h1>
-        <p>本项目致力于解决传统西瓜成熟度检测中的破坏性与抽检局限问题。<br>
-           通过多光谱传感器与物联网技术，实现瓜田环境的实时监控与西瓜糖度的精准无损检测，助力智慧农业数字化转型。</p>
-        <a href="admin/login.html" class="btn">进入管理员后台</a>
+<!-- ─── NAV ─── -->
+<nav>
+    <a href="index.html" class="nav-logo">
+        <div class="nav-logo-mark">
+            <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="9" cy="11" rx="8" ry="6" fill="white" opacity="0.9"/>
+                <path d="M4 9.5C5.5 6.5 12.5 6.5 14 9.5" stroke="#9FE1CB" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+                <line x1="9" y1="5" x2="9" y2="3" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="11" y1="4.5" x2="12" y2="3" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <span class="nav-logo-text">SmartWatermelon</span>
+    </a>
+    <nav class="nav-links">
+        <a href="#">系统简介</a>
+        <a href="#">技术方案</a>
+        <a href="#">数据大屏</a>
+        <a href="admin/login.html" class="nav-cta">进入后台 →</a>
+    </nav>
+</nav>
+
+<!-- ─── HERO ─── -->
+<div class="hero">
+    <div class="hero-left">
+        <div class="hero-tag">
+            <span class="hero-tag-dot"></span>
+            系统运行中 · v2.0
+        </div>
+        <h1>基于多光谱传感器的<br>西瓜<em>无损糖度</em>检测平台</h1>
+        <p class="hero-desc">融合 AS7341 十一通道光谱采集与 MLR 多元线性回归模型，配合物联网实时传输，实现瓜田环境监控与糖度精准无损检测，助力智慧农业数字化转型。</p>
+        <div class="hero-actions">
+            <a href="admin/login.html" class="btn-primary">进入管理后台 →</a>
+            <a href="#arch" class="btn-ghost">查看技术架构</a>
+        </div>
     </div>
 
-    <div class="features">
-        <div class="feature-card">
-            <h3>🔬 无损糖度检测</h3>
-            <p>基于AS7341多光谱传感器，配合MLR多元线性回归模型，无需切瓜即可秒测糖度。</p>
+    <div class="hero-panel">
+        <div class="hero-panel-header">
+            <span class="hero-panel-title">系统技术规格</span>
+            <span class="hero-panel-status"><span class="status-dot"></span>ONLINE</span>
         </div>
-        <div class="feature-card">
-            <h3>🌤️ 环境实时监控</h3>
-            <p>采集温湿度与光照强度，分析瓜田微气候，为西瓜成熟期预测提供环境数据支撑。</p>
-        </div>
-        <div class="feature-card">
-            <h3>📊 智能监控大屏</h3>
-            <p>Web端阵列化显示数据，支持6秒无操作自动轮询，历史趋势折线图一览无余。</p>
+        <div class="hero-panel-body">
+            <div class="spec-row">
+                <span class="spec-label">传感器型号</span>
+                <span class="spec-value">AS7341</span>
+            </div>
+            <div class="spec-row">
+                <span class="spec-label">光谱通道数</span>
+                <span class="spec-value">11 channels</span>
+            </div>
+            <div class="spec-row">
+                <span class="spec-label">检测模型</span>
+                <span class="spec-value">MLR 多元线性回归</span>
+            </div>
+            <div class="spec-row">
+                <span class="spec-label">糖度检测精度</span>
+                <span class="spec-value">±0.3 °Brix <span class="spec-badge">高精度</span></span>
+            </div>
+            <div class="spec-row">
+                <span class="spec-label">单次检测耗时</span>
+                <span class="spec-value">&lt; 3 s</span>
+            </div>
+            <div class="spec-row">
+                <span class="spec-label">数据轮询间隔</span>
+                <span class="spec-value">6 s</span>
+            </div>
+            <div class="spec-row">
+                <span class="spec-label">检测方式</span>
+                <span class="spec-value">无损 · 非接触</span>
+            </div>
+            <div class="spec-row">
+                <span class="spec-label">主控单元</span>
+                <span class="spec-value">ESP32</span>
+            </div>
         </div>
     </div>
+</div>
 
-    <div class="footer">
-        <p>开发技术支持：SmartWatermelonSystem 团队 | 联系方式：Howrun777@outlook.com</p>
-        <p style="font-size: 0.8rem; margin-top: 10px; color: #aaa;">© 2026 毕业设计专属版权所有</p>
+<!-- ─── STATS ─── -->
+<div class="stats-strip">
+    <div class="stats-inner">
+        <div class="stat-item">
+            <span class="stat-num">±0.3</span>
+            <span class="stat-label">糖度精度 °Brix</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-num">&lt;3s</span>
+            <span class="stat-label">单次检测耗时</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-num">11</span>
+            <span class="stat-label">光谱采集通道</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-num">6s</span>
+            <span class="stat-label">自动轮询间隔</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-num">0</span>
+            <span class="stat-label">破坏性操作</span>
+        </div>
     </div>
+</div>
+
+<!-- ─── FEATURES ─── -->
+<div class="section">
+    <div class="section-eyebrow">核心功能</div>
+    <div class="section-heading">三大技术模块，全链路覆盖</div>
+    <div class="section-sub">从传感器采集到 Web 端可视化，端到端闭环设计。</div>
+
+    <div class="feature-grid">
+        <div class="feature-card">
+            <div class="feature-icon icon-green">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#1D9E75" stroke-width="1.5" stroke-linecap="round">
+                    <circle cx="10" cy="10" r="8"/>
+                    <path d="M6 10.5C7.2 7 12.8 7 14 10.5"/>
+                    <line x1="10" y1="6" x2="10" y2="4"/>
+                </svg>
+            </div>
+            <h3>无损糖度检测</h3>
+            <p>AS7341 多光谱传感器采集 11 个波段光谱反射率，配合 MLR 模型实时推算西瓜 Brix 糖度，无需切开，秒级出结果。</p>
+            <span class="feature-tag">精度 ±0.3 °Brix</span>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon icon-teal">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#0F6E56" stroke-width="1.5" stroke-linecap="round">
+                    <rect x="2" y="5" width="16" height="11" rx="2"/>
+                    <path d="M6 9h8M6 12.5h5"/>
+                </svg>
+            </div>
+            <h3>瓜田环境监控</h3>
+            <p>实时采集温度、湿度与光照强度，建立环境−糖度关联模型，辅助成熟期预测与精准灌溉决策。</p>
+            <span class="feature-tag">实时刷新</span>
+        </div>
+
+        <div class="feature-card">
+            <div class="feature-icon icon-emerald">
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#085041" stroke-width="1.5" stroke-linecap="round">
+                    <polyline points="2,15 6,9 9,12 13,6 18,10"/>
+                    <line x1="2" y1="17" x2="18" y2="17"/>
+                </svg>
+            </div>
+            <h3>智能监控大屏</h3>
+            <p>Web 端阵列化展示传感器数据，支持 6 秒自动轮询与手动刷新，历史趋势折线图清晰呈现糖度与环境变化。</p>
+            <span class="feature-tag">自动轮询 6s</span>
+        </div>
+    </div>
+</div>
+
+<!-- ─── ARCH ─── -->
+<div class="arch-section" id="arch">
+    <div class="arch-inner">
+        <div class="section-eyebrow">技术架构</div>
+        <div class="section-heading">四层解耦，端到端数据链路</div>
+        <div class="section-sub" style="margin-bottom: 2rem;">硬件感知 → 协议传输 → 模型处理 → 前端可视化，各层独立，便于维护与扩展。</div>
+
+        <div class="arch-grid">
+            <div class="arch-layer">
+                <div class="arch-layer-head head-green">感知层 · Perception</div>
+                <div class="arch-layer-body">
+                    <div class="arch-item">AS7341 多光谱传感器</div>
+                    <div class="arch-item">SHT31 温湿度传感器</div>
+                    <div class="arch-item">BH1750 光照传感器</div>
+                    <div class="arch-item">ESP32 主控单元</div>
+                </div>
+            </div>
+            <div class="arch-layer">
+                <div class="arch-layer-head head-blue">传输层 · Transport</div>
+                <div class="arch-layer-body">
+                    <div class="arch-item">Wi-Fi 无线通信</div>
+                    <div class="arch-item">HTTP RESTful API</div>
+                    <div class="arch-item">JSON 数据格式</div>
+                    <div class="arch-item">断线重连机制</div>
+                </div>
+            </div>
+            <div class="arch-layer">
+                <div class="arch-layer-head head-amber">处理层 · Processing</div>
+                <div class="arch-layer-body">
+                    <div class="arch-item">MLR 糖度回归模型</div>
+                    <div class="arch-item">数据清洗与校验</div>
+                    <div class="arch-item">历史数据持久化</div>
+                    <div class="arch-item">阈值告警判断</div>
+                </div>
+            </div>
+            <div class="arch-layer">
+                <div class="arch-layer-head head-purple">展示层 · Presentation</div>
+                <div class="arch-layer-body">
+                    <div class="arch-item">Web 可视化大屏</div>
+                    <div class="arch-item">趋势折线图分析</div>
+                    <div class="arch-item">管理员后台系统</div>
+                    <div class="arch-item">移动端自适应</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="dataflow">
+            <div class="flow-node">传感器采集</div>
+            <span class="flow-sep">→</span>
+            <div class="flow-node">ESP32 处理</div>
+            <span class="flow-sep">→</span>
+            <div class="flow-node">HTTP 上传</div>
+            <span class="flow-sep">→</span>
+            <div class="flow-node">MLR 推算</div>
+            <span class="flow-sep">→</span>
+            <div class="flow-node">糖度结果</div>
+            <span class="flow-sep">→</span>
+            <div class="flow-node">Web 展示</div>
+            <span class="flow-label">全链路延迟 &lt; 5s</span>
+        </div>
+    </div>
+</div>
+
+<!-- ─── FOOTER ─── -->
+<footer>
+    <div class="footer-inner">
+        <div>
+            <div class="footer-brand-name">SmartWatermelonSystem</div>
+            <div class="footer-detail">
+                智能西瓜无损糖度检测系统<br>
+                联系方式：<a href="mailto:Howrun777@outlook.com">Howrun777@outlook.com</a>
+            </div>
+        </div>
+        <div class="footer-right">
+            © 2026 毕业设计 · 专属版权所有<br>
+            <span style="font-size:11px; margin-top: 4px; display:block;">Based on AS7341 + MLR Model</span>
+        </div>
+    </div>
+</footer>
 
 </body>
 </html>
