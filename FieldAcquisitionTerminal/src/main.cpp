@@ -120,7 +120,7 @@ void onMeasureBtnClicked() {
     }
 
     // ✅ 数据采集成功！无论是何种模式，只要拿到光谱就响 1 秒！
-    BuzzerManager::getInstance().beep(1000);
+    BuzzerManager::getInstance().beep(2000);
 
     float brix = SugarCalc::calculate(specObj);
 
@@ -211,7 +211,7 @@ void setup() {
     if (RTCManager::getInstance().getTimestamp() > 1600000000) {
         timeIsSynced = true;
         // ✅ 硬件 RTC 自带合法时间，一开机就同步成功，响 2 秒！
-        BuzzerManager::getInstance().beep(2000);
+        BuzzerManager::getInstance().beep(4000);
     } 
 
     // 3. 如果 RTC 没时间，尝试连 WiFi 兜底授时
@@ -227,7 +227,7 @@ void setup() {
                 RTCManager::getInstance().syncTime(st);
                 timeIsSynced = true;
                 // ✅ 从服务器拿到合法时间，同步成功，响 2 秒！
-                BuzzerManager::getInstance().beep(2000);
+                BuzzerManager::getInstance().beep(4000);
             }
         }
     }
@@ -275,7 +275,7 @@ void loop() {
                 RTCManager::getInstance().syncTime(st);
                 ui.showModeSelection(); 
                 // ✅ 热连网同步时间成功，响 2 秒！
-                BuzzerManager::getInstance().beep(2000);
+                BuzzerManager::getInstance().beep(4000);
             } else {
                 // 热解锁时，WiFi 肯定连上了，但服务器没给时间
                 ui.updateStatus("Sync Failed!\nRTC: X | WIFI: OK | SVR: X");
