@@ -2,7 +2,7 @@
 
 ## 完整架构设计 + 接口文档
 
-本文档严格按照毕业设计需求编写，包含**项目分层架构、文件目录架构、功能模块架构、设备-服务端接口、前端-服务端接口**，完全匹配定义的硬件、软件、数据库、业务规则，可直接用于毕业设计说明书。
+本文档包含**项目分层架构、文件目录架构、功能模块架构、设备-服务端接口、前端-服务端接口**，完全匹配定义的硬件、软件、数据库、业务规则，可直接用于工业落地。
 
 ---
 
@@ -11,10 +11,10 @@
 系统采用**三层架构**设计，符合物联网+Web系统标准架构，职责完全解耦：
 
 
-| 层级  | 名称                                 | 核心职责                                 | 技术栈                             |
-| --- | ---------------------------------- | ------------------------------------ | ------------------------------- |
-| 感知层 | 瓜田环境采集终端 FieldAcquisitionTerminal  | 数据采集（光谱/温湿度/光照）、本地计算糖度、本地显示、HTTP上传数据 | ESP32、Arduino/ESP-IDF、I2C传感器    |
-| 服务层 | 瓜田数据处理中心 FieldDataProcessingServer | 设备认证、数据接收、校验、计算（糖度/成熟度）、MySQL存储、接口提供 | C++、HTTP协议、MySQL、Argon2、Session |
+| 层级  | 名称                                 | 核心职责                                                                 | 技术栈                             |
+| --- | ---------------------------------- | -------------------------------------------------------------------- | ------------------------------- |
+| 感知层 | 瓜田环境采集终端 FieldAcquisitionTerminal  | 数据采集（光谱/温湿度/光照）、本地计算糖度、本地显示、HTTP上传数据                                 | ESP32、Arduino/ESP-IDF、I2C传感器    |
+| 服务层 | 瓜田数据处理中心 FieldDataProcessingServer | 设备认证、数据接收、校验、计算（糖度/成熟度）、MySQL存储、接口提供                                 | C++、HTTP协议、MySQL、Argon2、Session |
 | 应用层 | 瓜田监测可视化平台 FieldMonitoringPlatform  | 前台展示、管理员登录、数据可视化（图表/阵列）、掉线感知（30分钟无数据标记红色）、双定时器机制（60s无操作切换瓜田+每6s静默刷新） | HTML/CSS/JS、ECharts、Cookie      |
 
 
@@ -22,7 +22,7 @@
 
 ## 二、项目文件目录架构
 
-标准化毕业设计项目结构，分三大核心模块，目录清晰、可直接落地开发：
+标准化工业级项目结构，分三大核心模块，目录清晰、可直接落地开发：
 
 ```Plain Text
 
@@ -187,13 +187,11 @@ SmartWatermelonSystem/               # 项目根目录（git仓库）
 
 ```
 
-
-
 ---
 
 ## 三、功能模块架构
 
-分三大核心模块，**子模块完全匹配你的需求**，无冗余、无缺失：
+分三大核心模块，**子模块完全匹配需求**，无冗余、无缺失：
 
 ### 模块1：瓜田环境采集终端（FieldAcquisitionTerminal）
 
@@ -345,14 +343,14 @@ SmartWatermelonSystem/               # 项目根目录（git仓库）
 > 用于 Web 后台登录校验
 
 
-| 字段名           | 类型           | 约束                                                    | 说明                 |
-| ------------- | ------------ | ----------------------------------------------------- | ------------------ |
-| id            | INT          | PRIMARY KEY, AUTO_INCREMENT                           | 主键，唯一标识            |
-| username      | VARCHAR(64)  | UNIQUE, NOT NULL                                      | 管理员账号（唯一）          |
+| 字段名           | 类型           | 约束                                                    | 说明                        |
+| ------------- | ------------ | ----------------------------------------------------- | ------------------------- |
+| id            | INT          | PRIMARY KEY, AUTO_INCREMENT                           | 主键，唯一标识                   |
+| username      | VARCHAR(64)  | UNIQUE, NOT NULL                                      | 管理员账号（唯一）                 |
 | password_hash | VARCHAR(255) | NOT NULL                                              | libsodium Argon2id 哈希后的密码 |
-| role          | TINYINT      | NOT NULL, DEFAULT 1                                   | 角色：0=超级管理员，1=普通管理员 |
-| created_at    | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP                             | 创建时间               |
-| updated_at    | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新时间               |
+| role          | TINYINT      | NOT NULL, DEFAULT 1                                   | 角色：0=超级管理员，1=普通管理员        |
+| created_at    | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP                             | 创建时间                      |
+| updated_at    | TIMESTAMP    | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新时间                      |
 
 
 **权限说明**：
@@ -630,14 +628,14 @@ max_connections = 10
 ### 4.6 关键业务规则
 
 
-| 规则         | 说明                                                         |
-| ---------- | ---------------------------------------------------------- |
-| **环境数据无效** | 温度=99 AND 湿度=99 AND 光照=99 → 环境数据跳过写入瓜田库，西瓜数据不受影响     |
-| **主键冲突解决** | 同一秒同一瓜田重复上传 → 时间戳+1秒后重试                                    |
+| 规则         | 说明                                                                              |
+| ---------- | ------------------------------------------------------------------------------- |
+| **环境数据无效** | 温度=99 AND 湿度=99 AND 光照=99 → 环境数据跳过写入瓜田库，西瓜数据不受影响                                |
+| **主键冲突解决** | 同一秒同一瓜田重复上传 → 时间戳+1秒后重试                                                         |
 | **糖度计算算法** | MLR多元线性回归：Sugar = 0.0012×ch415 + 0.0005×ch445 + 0.0021×ch480 + 5.2（系数由前期实验数据拟合） |
-| **成熟度计算**  | `maturity_score = sugar_brix / mature_sugar_threshold`     |
-| **设备禁用**   | `device_auth.status = 0` → HTTP 401 拒绝上传                   |
-| **瓜田号校验**  | 上传数据时必须校验瓜田号存在于 `field_production` 表                       |
+| **成熟度计算**  | `maturity_score = sugar_brix / mature_sugar_threshold`                          |
+| **设备禁用**   | `device_auth.status = 0` → HTTP 401 拒绝上传                                        |
+| **瓜田号校验**  | 上传数据时必须校验瓜田号存在于 `field_production` 表                                            |
 
 
 ---
@@ -916,18 +914,18 @@ max_connections = 10
 #### ESP32 引脚分配
 
 
-| 功能        | ESP32引脚 | 说明      |
-| --------- | ------- | ------- |
-| TFT_MISO  | GPIO19  | SPI主机输入 |
-| TFT_MOSI  | GPIO23  | SPI主机输出 |
-| TFT_SCLK  | GPIO18  | SPI时钟   |
-| TFT_CS    | GPIO5   | TFT片选   |
-| TFT_DC    | GPIO21  | 数据/命令选择 |
-| TFT_RST   | GPIO22  | 复位      |
-| TFT_BL    | GPIO4   | 背光控制    |
-| SDA       | GPIO27  | I2C数据线  |
-| SCL       | GPIO22  | I2C时钟线  |
-| LED_POWER | GPIO26  | LED灯带控制 |
+| 功能        | ESP32引脚 | 说明        |
+| --------- | ------- | --------- |
+| TFT_MISO  | GPIO19  | SPI主机输入   |
+| TFT_MOSI  | GPIO23  | SPI主机输出   |
+| TFT_SCLK  | GPIO18  | SPI时钟     |
+| TFT_CS    | GPIO5   | TFT片选     |
+| TFT_DC    | GPIO21  | 数据/命令选择   |
+| TFT_RST   | GPIO22  | 复位        |
+| TFT_BL    | GPIO4   | 背光控制      |
+| SDA       | GPIO27  | I2C数据线    |
+| SCL       | GPIO22  | I2C时钟线    |
+| LED_POWER | GPIO26  | LED灯带控制   |
 | BUZZER    | GPIO27  | 蜂鸣器控制（预留） |
 
 
@@ -1056,4 +1054,5 @@ GND         → GND引脚
 | MySQL数据库 | sws_user | **Mhr289839.** | 后端服务连接数据库    |
 | MySQL数据库 | root     | **Mhr289839.** | 数据库管理员操作     |
 | Web管理后台  | admin    | admin123       | 管理员登录（默认密码）  |
+
 
