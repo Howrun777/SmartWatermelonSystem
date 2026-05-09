@@ -17,6 +17,7 @@ DROP PROCEDURE IF EXISTS generate_watermelon_data//
 CREATE PROCEDURE generate_watermelon_data()
 BEGIN
     DECLARE i INT DEFAULT 0;
+    DECLARE progress DECIMAL(5,4);
     DECLARE base_sugar DECIMAL(5,2);
     DECLARE final_sugar DECIMAL(5,2);
     DECLARE maturity_val DECIMAL(5,3);
@@ -29,11 +30,15 @@ BEGIN
     
     -- 循环插入1000条数据
     WHILE i < 1000 DO
-        -- 基础糖度：从10.00到12.00单调递增
-        SET base_sugar = ROUND(10.00 + (2.00 * i / 999), 2);
+        -- 进度：0到1
+        SET progress = i / 999.0;
         
-        -- 随机波动：-0.3 到 +0.3 之间
-        SET random_offset = ROUND((RAND() - 0.5) * 0.6, 2);
+        -- 基础糖度：使用二次多项式，越往后增长越快（加速增长曲线）
+        -- 从10.00到12.00，初期缓慢，后期加速
+        SET base_sugar = ROUND(10.00 + 2.00 * POW(progress, 1.8), 2);
+        
+        -- 随机波动：-0.2 到 +0.2 之间（保持小波动）
+        SET random_offset = ROUND((RAND() - 0.5) * 0.4, 2);
         
         -- 最终糖度 = 基础值 + 随机波动
         SET final_sugar = ROUND(base_sugar + random_offset, 2);
