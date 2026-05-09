@@ -1,0 +1,6 @@
+=======================================
+   Smart Watermelon System - V1.0      
+=======================================
+[MySQL] Connected to database: sws_db successfully!
+[Init] Updating 'admin' password to Argon2 hash for admin123...
+Starting SmartWatermelonServer on http://0.0.0.0:8080...

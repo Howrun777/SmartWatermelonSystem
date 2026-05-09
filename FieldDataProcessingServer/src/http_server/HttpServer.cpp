@@ -21,6 +21,7 @@ void HttpServer::start(const std::string& host, int port) {
     svr.set_mount_point("/admin/css", "../../FieldMonitoringPlatform/admin/css");
     svr.set_mount_point("/admin/js", "../../FieldMonitoringPlatform/admin/js");
     svr.set_mount_point("/assets", "../../FieldMonitoringPlatform/assets");
+    svr.set_mount_point("/admin", "../../FieldMonitoringPlatform/admin");
 
     if (!svr.listen(host.c_str(), port)) {
         std::cerr << "Error: Failed to start server! Port may be in use." << std::endl;

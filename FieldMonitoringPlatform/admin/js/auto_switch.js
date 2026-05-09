@@ -142,40 +142,6 @@ function getTimeRange(scaleLevel) {
     return { min: past, max: now, interval: interval };
 }
 
-window.reloadAllChartsData = async function() {
-    if (!window.currentFieldId) return;
-
-    try {
-        const resEnv = await fetch(`/api/admin/field/environment?field_id=${window.currentFieldId}`);
-        const jsonEnv = await resEnv.json();
-        
-        if (jsonEnv.code === 200) {
-            const rawData = jsonEnv.data;
-            const tempData = rawData.map(d => [d.timestamp * 1000, d.temperature]);
-            const humData = rawData.map(d => [d.timestamp * 1000, d.humidity]);
-            const lightData = rawData.map(d => [d.timestamp * 1000, d.light]);
-            
-            const tempRange = getTimeRange(scales.temp);
-            const humRange = getTimeRange(scales.hum);
-            const lightRange = getTimeRange(scales.light);
-
-            renderEnvHistoryCharts(tempData, humData, lightData, tempRange, humRange, lightRange);
-        }
-
-        if (window.currentSelectedWmId) {
-            const resWm = await fetch(`/api/admin/watermelon/history?device_id=${window.currentSelectedWmId}`);
-            const jsonWm = await resWm.json();
-            
-            if (jsonWm.code === 200) {
-                const sugarData = jsonWm.data.map(d => [d.timestamp * 1000, d.sugar_brix]);
-                const sugarRange = getTimeRange(scales.sugar);
-                renderWmHistoryChart(sugarData, window.currentSelectedWmId, sugarRange, 12.5);
-            }
-        }
-    } catch (e) {
-        console.error("图表渲染失败", e);
-    }
-}
 // 更新顶部状态栏时间
 function updateLastRefreshTime() {
     let now = new Date();

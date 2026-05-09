@@ -2,6 +2,7 @@
 #include "../config.h"
 
 void BuzzerManager::begin() {
+    if(BUZZER_PIN == 255) return; // 拦截非法引脚
     pinMode(BUZZER_PIN, OUTPUT);
     digitalWrite(BUZZER_PIN, LOW); // 默认关闭
 }

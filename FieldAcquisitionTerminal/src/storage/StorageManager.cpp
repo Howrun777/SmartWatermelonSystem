@@ -7,6 +7,10 @@ void StorageManager::begin() {
         Serial.println("LittleFS Mount Failed!");
         return;
     }
+
+    // 👇👇👇 新增这一行：强制把 ESP32 里的垃圾数据全部格掉！
+    //LittleFS.format(); 
+
     Serial.println("LittleFS Mounted Successfully.");
     checkAndCleanCapacity(); // 开机先检查一下容量
 }

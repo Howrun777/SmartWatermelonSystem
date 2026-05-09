@@ -1,5 +1,3 @@
-
-
 #pragma once
 
 // ======= 设备与网络配置 =======
@@ -23,7 +21,7 @@
 #define TOUCH_IRQ_PIN  36
 
 // ======= 蜂鸣器引脚 =======
-#define BUZZER_PIN 26 // ✅ 新增：高电平触发鸣叫
+#define BUZZER_PIN 26 // 暂时禁用：高电平触发鸣叫
 
 // ======= 业务定时配置 =======
 #define ENV_UPDATE_INTERVAL 2000    // UI环境数据刷新频率: 2秒
