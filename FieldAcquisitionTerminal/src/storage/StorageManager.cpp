@@ -15,16 +15,44 @@ void StorageManager::begin() {
     checkAndCleanCapacity(); // 开机先检查一下容量
 }
 
-void StorageManager::saveRecord(uint32_t ts, float brix, float temp, float hum, int light, const JsonObject& spec, bool is_uploaded) {
+bool StorageManager::timestampExists(uint32_t ts) {
+    File file = LittleFS.open(FILE_PATH, FILE_READ);
+    if (!file) return false;
+
+    while (file.available()) {
+        String line = file.readStringUntil('\n');
+        if (line.length() < 10) continue;
+
+        StaticJsonDocument<512> tempDoc;
+        if (!deserializeJson(tempDoc, line) && tempDoc["ts"].as<uint32_t>() == ts) {
+            file.close();
+            return true;
+        }
+    }
+
+    file.close();
+    return false;
+}
+
+uint32_t StorageManager::saveRecord(uint32_t ts, float brix, float temp, float hum, int light, const JsonObject& spec, bool is_uploaded) {
+    uint32_t stored_ts = ts;
+    while (!is_uploaded && timestampExists(stored_ts)) {
+        stored_ts++;
+    }
+
+    if (!is_uploaded && stored_ts != ts) {
+        Serial.printf("Duplicate local timestamp %u detected. Saved as %u.\n", ts, stored_ts);
+    }
+
     File file = LittleFS.open(FILE_PATH, FILE_APPEND);
     if (!file) {
         Serial.println("Failed to open file for appending");
-        return;
+        return stored_ts;
     }
 
     // 序列化为单行 JSON
     StaticJsonDocument<512> doc;
-    doc["ts"] = ts;
+    doc["ts"] = stored_ts;
     doc["brix"] = brix;
     doc["t"] = temp;
     doc["h"] = hum;
@@ -35,8 +63,9 @@ void StorageManager::saveRecord(uint32_t ts, float brix, float temp, float hum, 
     serializeJson(doc, file);
     file.print("\n"); // 换行符极其重要 (JSON Lines 格式)
     file.close();
-    
+
     Serial.printf("Record saved to disk. Uploaded: %s\n", is_uploaded ? "Y" : "N");
+    return stored_ts;
 }
 
 void StorageManager::checkAndCleanCapacity() {
@@ -125,8 +154,10 @@ void StorageManager::markAsUploaded(uint32_t target_ts) {
         if (!found) {
             StaticJsonDocument<512> tempDoc;
             if (!deserializeJson(tempDoc, line)) {
-                // 如果时间戳匹配，修改它的 up 标记为 1
-                if (tempDoc["ts"].as<uint32_t>() == target_ts) {
+                // 如果时间戳匹配，且这条记录尚未上传，修改它的 up 标记为 1。
+                // 同一秒产生多条离线记录时，旧版本可能会留下相同 ts；
+                // 只匹配 up=0 可以避免反复改写第一条已上传记录，导致后续重复 ts 永远补发不完。
+                if (tempDoc["ts"].as<uint32_t>() == target_ts && tempDoc["up"].as<int>() == 0) {
                     tempDoc["up"] = 1;
                     String newLine;
                     serializeJson(tempDoc, newLine);

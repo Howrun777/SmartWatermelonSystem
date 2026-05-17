@@ -330,9 +330,16 @@ void loop() {
                 String timeStr = RTCManager::getInstance().formatTime(target_ts);
                 ui.markIndustrialHistoryUploaded(timeStr.c_str());
             } else {
+                if (serverMsg.indexOf("时间戳重复") >= 0 || serverMsg.indexOf("duplicate") >= 0) {
+                    Serial.printf("Duplicate recovered data (TS: %u). Marking local record as handled.\n", target_ts);
+                    StorageManager::getInstance().markAsUploaded(target_ts);
+                    String timeStr = RTCManager::getInstance().formatTime(target_ts);
+                    ui.markIndustrialHistoryUploaded(timeStr.c_str());
+                    return;
+                }
                 // 服务器还是宕机状态，暂停补发，等 15 秒后的周期检查再试
                 Serial.println("Server still down. Pause recovery.");
-                isRecoveringData = false; 
+                isRecoveringData = false;
             }
         } else {
             isRecoveringData = false; 

@@ -82,17 +82,23 @@ bool NetworkManager::uploadData(const JsonDocument& payload, String& outMsg, uin
     if (httpResponseCode > 0) {
         String responseStr = http.getString();
         StaticJsonDocument<512> resDoc;
-        deserializeJson(resDoc, responseStr);
-        
+        DeserializationError err = deserializeJson(resDoc, responseStr);
+        if (err) {
+            outMsg = "Invalid server response";
+            http.end();
+            return false;
+        }
+
         outMsg = resDoc["msg"].as<String>();
-        
+        int businessCode = resDoc["code"].as<int>();
+
         // 如果外部传入了指针，且服务器返回了时间戳，则赋值回去用于校时
         if (outServerTime != nullptr && resDoc["data"].containsKey("server_time")) {
             *outServerTime = resDoc["data"]["server_time"].as<uint32_t>();
         }
-        
+
         http.end();
-        return httpResponseCode == 200;
+        return httpResponseCode == 200 && businessCode == 200;
     } else {
         outMsg = "HTTP Error: " + String(httpResponseCode);
         http.end();

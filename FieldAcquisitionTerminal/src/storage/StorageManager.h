@@ -12,7 +12,7 @@ public:
     void begin();
     
     // 1. 存入一条新数据（is_uploaded: Y/N）
-    void saveRecord(uint32_t ts, float brix, float temp, float hum, int light, const JsonObject& spec, bool is_uploaded);
+    uint32_t saveRecord(uint32_t ts, float brix, float temp, float hum, int light, const JsonObject& spec, bool is_uploaded);
     
     // 2. 检查存储容量，如果剩余空间不足 20%，删除最早的一半数据
     void checkAndCleanCapacity();
@@ -26,4 +26,5 @@ public:
 private:
     StorageManager() = default;
     const char* FILE_PATH = "/records.jsonl";
+    bool timestampExists(uint32_t ts);
 };
