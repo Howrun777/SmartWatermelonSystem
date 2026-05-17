@@ -29,6 +29,7 @@ public:
     void updateCountdown(uint32_t remain_ms, uint32_t total_ms);
     void addIndustrialHistory(const char* timeStr, float brix, float temp, float hum, int light, bool uploaded);
     void markIndustrialHistoryUploaded(const char* timeStr);
+    void updateWiFiStatus(bool connected);
 
     // 测试模式相关
     void buildTestUI();
@@ -58,8 +59,9 @@ private:
     lv_obj_t * label_hum;
     lv_obj_t * label_light;
     lv_obj_t * label_sugar;
-    lv_obj_t * label_spectrum; 
+    lv_obj_t * label_spectrum;
     lv_obj_t * label_status;
+    lv_obj_t * label_wifi_status;
     lv_obj_t * label_countdown;
     lv_obj_t * table_ind_history; 
 

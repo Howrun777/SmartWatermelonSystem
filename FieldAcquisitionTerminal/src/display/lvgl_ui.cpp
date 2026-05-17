@@ -8,6 +8,7 @@
 #define COLOR_BTN_TEST lv_color_hex(0x3498db) // 蓝色测试按钮
 #define COLOR_BTN_IND lv_color_hex(0xe67e22) // 橙色工业按钮
 #define COLOR_DANGER lv_color_hex(0xe74c3c) // 红色警告
+#define COLOR_SUCCESS lv_color_hex(0x27ae60) // 绿色正常状态
 #define COLOR_GREY lv_color_hex(0x95a5a6) // 灰色
 
 void UIManager::init(MeasureCallback measureCb, ModeSelectCallback modeCb, ClearTestCallback clearCb, ReturnHomeCallback homeCb) {
@@ -275,10 +276,29 @@ void UIManager::buildIndustrialUI() {
     // 设置第一页的内边距：所有方向都是5像素 (控件不会贴着边缘)
     lv_obj_set_style_pad_all(tile1, 5, 0);
 
-    // --- 1. 顶部状态栏 (显示 "Initializing..." 或时间同步状态) ---
-    label_status = lv_label_create(tile1); // 创建一个文本标签
-    lv_label_set_text(label_status, "Initializing..."); // 设置默认文字
-    lv_obj_set_style_text_color(label_status, COLOR_BTN_TEST, 0); // 设置文字颜色为蓝色
+    // --- 1. 顶部状态栏：左侧显示时间/状态，右侧显示 WiFi 状态 ---
+    lv_obj_t * status_bar = lv_obj_create(tile1);
+    lv_obj_set_size(status_bar, 230, 22);
+    lv_obj_set_style_bg_opa(status_bar, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(status_bar, 0, 0);
+    lv_obj_set_style_pad_all(status_bar, 0, 0);
+    lv_obj_set_flex_flow(status_bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(status_bar, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    label_status = lv_label_create(status_bar); // 左侧时间/状态
+    lv_obj_set_width(label_status, 150);
+    lv_label_set_long_mode(label_status, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_font(label_status, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(label_status, COLOR_BTN_TEST, 0);
+    lv_label_set_text(label_status, "Initializing...");
+
+    label_wifi_status = lv_label_create(status_bar); // 右侧 WiFi 状态
+    lv_obj_set_width(label_wifi_status, 72);
+    lv_label_set_long_mode(label_wifi_status, LV_LABEL_LONG_CLIP);
+    lv_obj_set_style_text_align(label_wifi_status, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_style_text_font(label_wifi_status, &lv_font_montserrat_12, 0);
+    lv_label_set_text(label_wifi_status, "WIFI-X");
+    lv_obj_set_style_text_color(label_wifi_status, COLOR_DANGER, 0);
 
     // --- 2. 设备身份信息区 (ID, Token, Variety) ---
     // 创建一个容器(面板)，用来包裹这三行信息，方便统一设置背景色和内边距
@@ -476,6 +496,13 @@ void UIManager::updateStatus(const char* msg) {
     } else if (current_mode == MODE_WAITING) {
         lv_label_set_text(boot_status_label, msg);
     }
+}
+
+void UIManager::updateWiFiStatus(bool connected) {
+    if (current_mode != MODE_INDUSTRIAL || !label_wifi_status) return;
+
+    lv_label_set_text(label_wifi_status, connected ? "WIFI-OK" : "WIFI-X");
+    lv_obj_set_style_text_color(label_wifi_status, connected ? COLOR_SUCCESS : COLOR_DANGER, 0);
 }
 
 void UIManager::updateCountdown(uint32_t remain_ms, uint32_t total_ms) {

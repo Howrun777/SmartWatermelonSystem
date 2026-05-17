@@ -255,9 +255,12 @@ void loop() {
     // ==========================================
     // ✅ 每帧必须运行蜂鸣器引擎，才能实现非阻塞响铃！
     BuzzerManager::getInstance().loop();
-    NetworkManager::maintainWiFi(); 
+    NetworkManager::maintainWiFi();
     bool currentWiFiState = (WiFi.status() == WL_CONNECTED);
-    
+    if (sysMode == MODE_INDUSTRIAL) {
+        ui.updateWiFiStatus(currentWiFiState);
+    }
+
     // 【场景 A：网络刚刚恢复 (断开 -> 连接)】
     if (currentWiFiState && !wasWiFiConnected) {
         // 1. 激活延迟补发机制
