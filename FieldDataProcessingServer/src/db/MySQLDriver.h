@@ -25,7 +25,15 @@ public:
 private:
     MySQLDriver();
     ~MySQLDriver();
+
+    bool connectUnlocked();
+    bool ensureConnected();
     
     MYSQL* conn;
     std::mutex mtx; // 保证多线程写入安全
+    std::string host_;
+    std::string user_;
+    std::string pwd_;
+    std::string db_;
+    int port_ = 0;
 };

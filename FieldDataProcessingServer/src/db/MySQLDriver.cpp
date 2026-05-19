@@ -17,18 +17,50 @@ MySQLDriver& MySQLDriver::getInstance() {
 }
 
 bool MySQLDriver::connect(const std::string& host, const std::string& user, const std::string& pwd, const std::string& db, int port) {
-    if (mysql_real_connect(conn, host.c_str(), user.c_str(), pwd.c_str(), db.c_str(), port, nullptr, 0) == nullptr) {
+    std::lock_guard<std::mutex> lock(mtx);
+    host_ = host;
+    user_ = user;
+    pwd_ = pwd;
+    db_ = db;
+    port_ = port;
+    return connectUnlocked();
+}
+
+bool MySQLDriver::connectUnlocked() {
+    if (!conn) {
+        conn = mysql_init(nullptr);
+    }
+
+    if (mysql_real_connect(conn, host_.c_str(), user_.c_str(), pwd_.c_str(), db_.c_str(), port_, nullptr, 0) == nullptr) {
         std::cerr << "[MySQL Error] Failed to connect: " << mysql_error(conn) << std::endl;
         return false;
     }
     // 设置字符集，防止中文乱码
     mysql_set_character_set(conn, "utf8mb4");
-    std::cout << "[MySQL] Connected to database: " << db << " successfully!" << std::endl;
+    std::cout << "[MySQL] Connected to database: " << db_ << " successfully!" << std::endl;
     return true;
+}
+
+bool MySQLDriver::ensureConnected() {
+    if (conn && mysql_ping(conn) == 0) {
+        return true;
+    }
+
+    std::cerr << "[MySQL Warning] Connection lost, reconnecting..." << std::endl;
+    if (conn) {
+        mysql_close(conn);
+        conn = nullptr;
+    }
+    return connectUnlocked();
 }
 
 bool MySQLDriver::execute(const std::string& sql) {
     std::lock_guard<std::mutex> lock(mtx); // 加锁防并发冲突
+    if (!ensureConnected()) {
+        std::cerr << "[MySQL Error] Execute failed: database is not connected\nSQL: " << sql << std::endl;
+        return false;
+    }
+
     if (mysql_query(conn, sql.c_str())) {
         std::cerr << "[MySQL Error] Execute failed: " << mysql_error(conn) << "\nSQL: " << sql << std::endl;
         return false;
@@ -39,6 +71,11 @@ bool MySQLDriver::execute(const std::string& sql) {
 std::vector<std::map<std::string, std::string>> MySQLDriver::query(const std::string& sql) {
     std::lock_guard<std::mutex> lock(mtx);
     std::vector<std::map<std::string, std::string>> result_list;
+
+    if (!ensureConnected()) {
+        std::cerr << "[MySQL Error] Query failed: database is not connected\nSQL: " << sql << std::endl;
+        return result_list;
+    }
 
     if (mysql_query(conn, sql.c_str())) {
         std::cerr << "[MySQL Error] Query failed: " << mysql_error(conn) << "\nSQL: " << sql << std::endl;
@@ -68,7 +105,7 @@ std::vector<std::map<std::string, std::string>> MySQLDriver::query(const std::st
 // 过滤外部字符串，防止 SQL 注入
 std::string MySQLDriver::escapeString(const std::string& str) {
     std::lock_guard<std::mutex> lock(mtx);
-    if (!conn) return str;
+    if (!ensureConnected()) return str;
     
     // MySQL 转义后的字符串长度最多是原字符串的 2 倍 + 1
     char* buffer = new char[str.length() * 2 + 1];
