@@ -1,37 +1,33 @@
 #include "SugarCalc.h"
-#include <cmath> // 必须引入，为了使用 log10
+#include <cmath>
 
 double SugarCalc::calculate(const nlohmann::json& spectrum) {
-    // ==========================================
-    // 工业级 V3：宽动态范围映射 + 吸收率模型
-    // ==========================================
-    
-    double ch555 = spectrum.value("ch555", 0.0);
-    double ch640 = spectrum.value("ch640", 0.0);
+    // Fixed-light raw-channel MLR. chClear is recorded for diagnostics only,
+    // because the current optical structure can saturate the clear channel.
+    double ch445 = spectrum.value("ch445", 0.0);
+    double ch480 = spectrum.value("ch480", 0.0);
     double ch680 = spectrum.value("ch680", 0.0);
     double chNIR = spectrum.value("chNIR", 0.0);
-    double chClear = spectrum.value("chClear", 1.0); 
 
-    // 1. 环境判据
-    if (chClear < 200.0 || chNIR < 10.0) return 0.0; 
-    
-    // 2. 朗伯-比尔定律 (取对数转吸收率)
-    double abs_555 = log10(chClear / (ch555 + 1.0)); 
-    double abs_640 = log10(chClear / (ch640 + 1.0)); 
-    double abs_680 = log10(chClear / (ch680 + 1.0)); 
-    double abs_NIR = log10(chClear / (chNIR + 1.0)); 
+    if (ch445 < 10.0 || ch480 < 10.0 || ch680 < 10.0 || chNIR < 10.0) {
+        return 0.0;
+    }
 
-    // 3. 模型系数
-    double k = -2.5;
-    double a = -1.2;
-    double b = 3.5;
-    double c = 6.8;
-    double d = 12.5;
+    const double scale = 10000.0;
+    double x445 = ch445 / scale;
+    double x480 = ch480 / scale;
+    double x680 = ch680 / scale;
+    double xNIR = chNIR / scale;
 
-    // 4. MLR 计算
-    double raw_brix = (a * abs_555) + (b * abs_640) + (c * abs_680) + (d * abs_NIR) + k;
+    const double k = 13.21941763;
+    const double a = -23.50752069;
+    const double b = 8.59055811;
+    const double c = 5.98831600;
+    const double d = -8.41861824;
 
-    // 5. 物理极限软约束
+    double raw_brix = (a * x445) + (b * x480) + (c * x680) + (d * xNIR) + k;
+
+    if (std::isnan(raw_brix)) return 0.0;
     if (raw_brix < 0.0) return 0.0;
     if (raw_brix > 20.0) return 20.0;
 
